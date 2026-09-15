@@ -2,12 +2,29 @@
   "expo": {
     "name": "photo-op-app",
     "slug": "photo-op-app",
+    "scheme": "photoop",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Photo-OP needs access to your photos so you can share in-the-moment media."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Photo-OP needs access to your camera to capture in-the-moment media."
+        }
+      ]
+    ],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "ai.photoop.app"
     },
     "android": {
       "adaptiveIcon": {
@@ -16,7 +33,8 @@
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "ai.photoop.app"
     },
     "web": {
       "favicon": "./assets/favicon.png"

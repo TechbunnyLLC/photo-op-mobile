@@ -1,12 +1,19 @@
 {
   "name": "photo-op-app",
   "version": "1.0.0",
-  "main": "index.ts",
+  "main": "expo-router/entry",
   "dependencies": {
     "expo": "~57.0.22",
+    "expo-camera": "^57.0.4",
+    "expo-constants": "^57.0.18",
+    "expo-image-picker": "^57.0.17",
+    "expo-linking": "^57.0.10",
+    "expo-router": "^57.0.21",
     "expo-status-bar": "~57.0.1",
     "react": "19.2.3",
-    "react-native": "0.86.3"
+    "react-native": "0.86.3",
+    "react-native-safe-area-context": "^5.9.1",
+    "react-native-screens": "^4.28.0"
   },
   "devDependencies": {
     "@types/react": "~19.2.2",
