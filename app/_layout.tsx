@@ -1,7 +1,16 @@
+// Polyfills required by aws-amplify on React Native — must load before
+// anything else touches Amplify (crypto.getRandomValues, fetch/URL).
+import "react-native-get-random-values";
+import "react-native-url-polyfill/auto";
+
+import { Amplify } from "aws-amplify";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
+import awsconfig from "../lib/amplify-config";
 import { resolveTheme } from "../lib/theme";
+
+Amplify.configure(awsconfig);
 
 export default function RootLayout() {
   const scheme = useColorScheme();

@@ -11,7 +11,10 @@ import {
   useColorScheme,
 } from "react-native";
 import { api } from "../../lib/api";
+import { MEDIA_BUCKET, USE_MOCK_API } from "../../lib/config";
 import { resolveTheme, radius, spacing } from "../../lib/theme";
+import { uploadMediaFile } from "../../lib/storage";
+import { detectLabels, detectText } from "../../lib/tagging";
 
 export default function CaptureScreen() {
   const scheme = useColorScheme();
@@ -55,7 +58,36 @@ export default function CaptureScreen() {
     if (!localUri) return;
     setUploading(true);
     try {
-      await api.uploadMedia(localUri, caption || undefined);
+      // 1. Upload the raw file to S3 under public/ — the backend's
+      //    PostCreateMedia Lambda picks up the Media insert below and
+      //    generates the watermarked/thumbnail variants automatically.
+      const imageKey = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+      await uploadMediaFile(localUri, imageKey, "image/jpeg");
+      const imageUrl = `https://${MEDIA_BUCKET}.s3.amazonaws.com/public/${imageKey}`;
+
+      // 2. Create the Media record.
+      const media = await api.createMedia({
+        imageKey,
+        imageUrl,
+        mediaType: "image",
+        description: caption,
+      });
+
+      // 3. Tag it. The real backend expects the client to do this (no
+      //    server-side tagging step exists) — see lib/tagging.ts. Best
+      //    effort: a tagging failure shouldn't block the upload succeeding.
+      if (!USE_MOCK_API) {
+        try {
+          const [labels, text] = await Promise.all([
+            detectLabels(MEDIA_BUCKET, `public/${imageKey}`),
+            detectText(MEDIA_BUCKET, `public/${imageKey}`),
+          ]);
+          await api.updateTags(media.id, [...labels, ...text]);
+        } catch (tagError) {
+          console.warn("Tagging failed, media was still uploaded:", tagError);
+        }
+      }
+
       Alert.alert("Uploaded", "Your moment is on its way to the feed.");
       setLocalUri(null);
       setCaption("");

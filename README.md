@@ -2,33 +2,42 @@
 
 First mobile client for Photo-OP.ai — a double-sided marketplace for
 in-the-moment photo/video media. Built with Expo (SDK 57) + expo-router +
-TypeScript.
+TypeScript, wired against the real backend at
+[github.com/PhotOp-io/backend](https://github.com/PhotOp-io/backend) (AWS
+Amplify Gen 1: Cognito, AppSync/GraphQL, DynamoDB, S3, Lambda, OpenSearch,
+Rekognition).
 
 ## Status
 
-This is a scaffold, built while waiting on GitHub access to any existing
-work. It runs against **mock data** (`lib/mock-data.ts`) by default — no
-real backend calls are made yet. Nothing here has touched Figma; screens are
-laid out to a reasonable default, not a real design.
+Runs against **mock data** (`lib/mock-data.ts`) by default — `lib/amplify-config.ts`
+still has placeholder values, so there's nothing real to connect to yet.
+Nothing here has touched Figma; screens are laid out to a reasonable
+default, not a real design.
 
 ## Structure
 
 ```
 app/
-  _layout.tsx          root Stack, wraps the tab navigator
+  _layout.tsx          root Stack; loads RN polyfills and calls Amplify.configure()
   (tabs)/
     _layout.tsx         bottom tab bar: Feed / Capture / Profile
     index.tsx           Feed — scrollable list of MediaItem cards
-    capture.tsx          Capture — camera/library picker + upload
-    profile.tsx           Profile — placeholder until auth exists
+    capture.tsx          Capture — camera/library picker, upload, tag, post
+    profile.tsx           Profile — placeholder until auth screens exist
 components/
   MediaCard.tsx         feed list item (thumbnail, uploader, tags, location)
 lib/
-  api.ts                fetch wrapper; toggles mock vs. live via config
-  config.ts             backend base URL + known AWS architecture notes
+  amplify-config.ts     Amplify client config — PLACEHOLDER, see below
+  api.ts                GraphQL operations against the real schema (or mock)
+  config.ts             mock-mode toggle + derived S3 bucket name
+  graphql/
+    queries.ts            listMediaSortByDate, myMediaSortByDate, getMedia
+    mutations.ts           createMedia, updateMediaTags, like/unlike, save/unsave
+  storage.ts             S3 upload/URL helpers (Amplify Storage)
+  tagging.ts             client-side Rekognition tagging (see below)
   mock-data.ts           fixture feed data
   theme.ts               color tokens (split dark/light, no pure black)
-  types.ts               MediaItem / CurrentUser shapes
+  types.ts               UI-facing MediaItem / CurrentUser shapes
 ```
 
 ## Running it
@@ -38,39 +47,48 @@ npm install
 npm run start   # then press i / a / w, or scan the QR code in Expo Go
 ```
 
-## Wiring up the real backend
+## Connecting the real backend
 
-Per what's known about the AWS account (`octopus44`): the backend runs as
-ECS Fargate services (`photoop-backend`, `photoop-worker`, `photoop-beat`)
-behind an ALB, Django + Celery + Redis + RDS, with media in the
-`photoop-media` S3 bucket and auto-tagging via AWS Rekognition.
+`lib/amplify-config.ts` needs real values from the backend's Amplify
+project (App ID `dhio6clqqxihz`, AWS account `652453621243`, region
+`us-west-2`) — either by running
 
-Not yet known / needed from the backend engineer:
+```
+amplify pull --appId dhio6clqqxihz --envName test   # or prod
+```
 
-1. The ALB's public hostname / API domain (`EXPO_PUBLIC_API_BASE_URL`).
-2. The mobile auth scheme (token? session? Cognito was ruled out — this is
-   plain Django, so likely DRF token or JWT).
-3. The feed endpoint's actual response shape — `lib/types.ts` is a guess
-   based on the product description, not a confirmed contract.
-4. The upload flow — almost certainly a presigned S3 URL issued by
-   `photoop-backend`, then a metadata POST, with Rekognition tagging
-   happening asynchronously on `photoop-worker`. `api.uploadMedia()` is a
-   stub until this is confirmed.
+from within a checkout of the `backend` repo (needs AWS credentials with
+access to that account), and copying the generated `aws-exports.js` values
+in, or by pulling the User Pool ID / AppSync endpoint & API key / S3 bucket
+name from the AWS Console directly. Once those are real, flip
+`EXPO_PUBLIC_USE_MOCK_API=false`.
 
-Once those are known, set `EXPO_PUBLIC_USE_MOCK_API=false` and
-`EXPO_PUBLIC_API_BASE_URL=...`, and fill in the real request logic in
-`lib/api.ts`.
+**Auth is not wired up yet** — there's no sign-in screen, so every
+Cognito-authenticated GraphQL call (create/update Media, likes/saves) will
+fail until that exists. That's the next real piece of work here.
+
+### The tagging gap
+
+The backend has no server-side auto-tagging step. In the original app, the
+client calls Amplify's Predictions category (Rekognition-backed) directly
+after upload, then writes the tags back onto `Media.arrayTags` itself.
+Amplify's current unified JS library (v6) dropped the Predictions category,
+so `lib/tagging.ts` calls Rekognition directly via `@aws-sdk/client-rekognition`,
+using credentials from the signed-in user's Cognito Identity Pool session.
+This needs `aws_cognito_identity_pool_id` set in `amplify-config.ts`, and
+that identity's IAM role actually needs `rekognition:DetectLabels` /
+`rekognition:DetectText` — worth confirming directly, since that's a
+different IAM role than the ones the backend's Lambdas run under.
+
+### Known gaps vs. the real schema
+
+- `Media.owner` on the real backend is Amplify's owner-auth string
+  (`"<cognitoId>::<username>"`); `lib/api.ts` splits it apart for display,
+  but there's no proper user profile lookup yet (real avatar, etc.).
+- Payments, subscriptions, likes/saves counters, search, and trending tags
+  all have real backend support (see the architecture doc) but no UI here
+  yet — the scaffold only covers create + list + like/unlike so far.
 
 ## Git
 
-A local git repo has already been initialized here (not yet pushed
-anywhere). Once the new GitHub repo for the mobile app exists, this is
-ready to push as-is:
-
-```
-git remote add origin <new-repo-url>
-git branch -M main
-git add -A
-git commit -m "Initial Expo scaffold for Photo-OP.ai mobile app"
-git push -u origin main
-```
+Pushed to `github.com/TechbunnyLLC/photo-op-mobile`.

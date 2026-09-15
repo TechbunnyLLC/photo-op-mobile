@@ -1,20 +1,23 @@
 // Central place for backend wiring.
 //
-// Known architecture (from AWS resource export, AWS account "octopus44"):
-//   - ECS Fargate services behind an ALB: photoop-backend, photoop-worker, photoop-beat
-//   - Django + Celery + Redis + RDS
-//   - S3 bucket "photoop-media" for uploaded media
-//   - AWS Rekognition for auto-tagging objects in photos/video
+// The real backend is github.com/PhotOp-io/backend — AWS Amplify Gen 1:
+// Cognito (auth), AppSync/GraphQL (API), DynamoDB (data), S3 (media),
+// Lambda (watermarking, search sync, counters, trending tags), OpenSearch
+// (search), Rekognition (tagging, called client-side — see lib/tagging.ts).
 //
-// None of the real endpoints are known to this scaffold yet — fill these in
-// (ideally from an EAS/Expo env var, not hardcoded) once the ALB's public
-// hostname and API auth scheme are confirmed with the backend engineer.
+// Client config (User Pool ID, AppSync endpoint, S3 bucket name, etc.)
+// lives in lib/amplify-config.ts and is still placeholder values — see the
+// comments there for how to get the real ones.
 
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_BASE_URL ?? "https://api.photo-op.ai";
+import awsconfig from "./amplify-config";
 
-export const MEDIA_BUCKET = "photoop-media";
+// The S3 bucket backing the "UserCreatedMedia" storage category. Amplify
+// gives generated bucket names a random suffix, so this can't be guessed —
+// it comes from lib/amplify-config.ts once that's filled in for real.
+export const MEDIA_BUCKET = awsconfig.aws_user_files_s3_bucket;
 
-// Toggle to develop the UI against local fixture data (see lib/api.ts)
-// before the mobile-facing API surface is confirmed.
+// Toggle to develop the UI against local fixture data (see lib/mock-data.ts)
+// before lib/amplify-config.ts has real values filled in. Defaults to
+// mock mode on unless explicitly turned off, since the placeholder config
+// can't reach anything real yet.
 export const USE_MOCK_API = process.env.EXPO_PUBLIC_USE_MOCK_API !== "false";
