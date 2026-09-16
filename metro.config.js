@@ -9,15 +9,20 @@ const config = getDefaultConfig(__dirname);
 config.resolver.sourceExts.push("cjs");
 config.resolver.unstable_enablePackageExports = false;
 
-// @aws-sdk/client-rekognition statically imports @aws-sdk/credential-provider-node
-// as its default (unused, Node-only) credentials fallback — see
-// lib/aws-stubs/credential-provider-node-stub.js for the full explanation.
-// This swaps it for a dependency-free stub so Metro never has to resolve
-// that package's Node built-ins (node:https, node:http2, ...).
+// @aws-sdk/client-rekognition statically imports two Node.js-only AWS SDK
+// pieces as unused defaults (see lib/aws-stubs/*.js for the full
+// explanation of each): a credentials fallback we never fall back to, and
+// an HTTP request handler we always override with a fetch-based one. Metro
+// still has to bundle whatever they statically import though, which pulls
+// in Node built-ins (node:https, node:http2, ...) that don't exist on a
+// phone. These aliases swap both for dependency-free stubs.
 config.resolver.extraNodeModules = {
   ...(config.resolver.extraNodeModules ?? {}),
   "@aws-sdk/credential-provider-node": require.resolve(
     "./lib/aws-stubs/credential-provider-node-stub.js"
+  ),
+  "@smithy/node-http-handler": require.resolve(
+    "./lib/aws-stubs/node-http-handler-stub.js"
   ),
 };
 

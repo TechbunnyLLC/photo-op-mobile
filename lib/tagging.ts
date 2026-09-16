@@ -4,6 +4,7 @@ import {
   DetectTextCommand,
   RekognitionClient,
 } from "@aws-sdk/client-rekognition";
+import { FetchHttpHandler } from "@smithy/fetch-http-handler";
 
 // The backend has no server-side tagging step — the original web/app
 // clients call Amplify's Predictions category (PhotoOpMediaLabeler /
@@ -29,6 +30,13 @@ async function getRekognitionClient() {
   return new RekognitionClient({
     region: "us-west-2",
     credentials: session.credentials,
+    // The SDK's default request handler (@smithy/node-http-handler) is
+    // Node.js-only. FetchHttpHandler uses fetch(), which React Native
+    // provides natively — this is what actually makes the request work
+    // on a phone. See metro.config.js / lib/aws-stubs for why the default
+    // still has to be stubbed out even though we override it here: Metro
+    // has to bundle the class reference either way.
+    requestHandler: new FetchHttpHandler(),
   });
 }
 
