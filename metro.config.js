@@ -10,15 +10,15 @@ const config = getDefaultConfig(__dirname);
 config.resolver.sourceExts.push("cjs");
 config.resolver.unstable_enablePackageExports = false;
 
-// @aws-sdk/client-rekognition statically imports two Node.js-only AWS SDK
-// pieces as unused defaults (see lib/aws-stubs/*.js for the full
-// explanation of each): a credentials fallback we never fall back to
-// (which itself pulls in node:fs via credential-provider-web-identity),
-// and an HTTP request handler we always override with a fetch-based one.
-// Both are genuinely installed packages, so a plain resolver alias
-// (extraNodeModules) doesn't touch them — Metro finds the real ones first
-// and never looks at the alias. resolveRequest is the mechanism that
-// actually redirects an existing, resolvable module to a different file.
+// The AWS SDK (used for client-side photo tagging — see lib/tagging.ts)
+// statically references several Node.js-only pieces that don't exist in
+// React Native: a credentials fallback we never fall back to, an HTTP
+// handler we always override with a fetch-based one, and a user-agent
+// builder that reads os/process info. See lib/aws-stubs/*.js for the full
+// explanation of each. These are genuinely installed packages, so a plain
+// resolver alias (extraNodeModules) doesn't work — Metro finds the real
+// ones first and never consults the alias. resolveRequest is the
+// mechanism that actually redirects an existing, resolvable module.
 const STUBS = {
   "@aws-sdk/credential-provider-node": path.resolve(
     __dirname,
@@ -28,11 +28,23 @@ const STUBS = {
     __dirname,
     "lib/aws-stubs/node-http-handler-stub.js"
   ),
+  "node:os": path.resolve(__dirname, "lib/aws-stubs/node-os-stub.js"),
+  "node:process": path.resolve(__dirname, "lib/aws-stubs/node-process-stub.js"),
 };
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   if (STUBS[moduleName]) {
     return { type: "sourceFile", filePath: STUBS[moduleName] };
+  }
+  // Safety net for any other "node:*" built-in reached only through the
+  // dead code paths above (fs, https, http2, stream, ...) — see
+  // empty-node-builtin.js. Named node: modules we DO need real behavior
+  // from are listed explicitly above instead.
+  if (moduleName.startsWith("node:")) {
+    return {
+      type: "sourceFile",
+      filePath: path.resolve(__dirname, "lib/aws-stubs/empty-node-builtin.js"),
+    };
   }
   return context.resolveRequest(context, moduleName, platform);
 };
