@@ -86,12 +86,32 @@ The backend has no server-side auto-tagging step. In the original app, the
 client calls Amplify's Predictions category (Rekognition-backed) directly
 after upload, then writes the tags back onto `Media.arrayTags` itself.
 Amplify's current unified JS library (v6) dropped the Predictions category,
-so `lib/tagging.ts` calls Rekognition directly via `@aws-sdk/client-rekognition`,
-using credentials from the signed-in user's Cognito Identity Pool session.
-This needs `aws_cognito_identity_pool_id` set in `amplify-config.ts`, and
-that identity's IAM role actually needs `rekognition:DetectLabels` /
-`rekognition:DetectText` — worth confirming directly, since that's a
-different IAM role than the ones the backend's Lambdas run under.
+so `lib/tagging.ts` calls Rekognition directly via `@aws-sdk/client-rekognition`.
+
+**Currently disabled** (`ENABLE_CLIENT_TAGGING = false` in `lib/config.ts`).
+The official SDK package bundles a string of Node.js-only internals
+unconditionally — a dead credentials fallback, a dead default HTTP
+handler, an os/process-based user-agent builder, and (the current blocker)
+a Node-only code path inside its auth-scheme resolution that crashes at
+*module load time*, before any function is even called. Each has been
+individually patchable via Metro resolver stubs (see `metro.config.js` and
+`lib/aws-stubs/`), but they kept surfacing one layer deeper with no clear
+end in sight, so tagging was switched off rather than continuing
+indefinitely — upload and posting work normally without it, photos just
+don't get auto-tags yet. `app/(tabs)/capture.tsx` uses a dynamic import
+gated on the flag specifically so `lib/tagging.ts` (and therefore the AWS
+SDK) never loads while it's off.
+
+To revisit: either keep extending the Metro stub chain in
+`lib/aws-stubs/` (whack-a-mole, no guarantee it's the last one), or
+rewrite `lib/tagging.ts` to sign and call the Rekognition API directly
+with `fetch()` instead of the official SDK (more upfront work, but no
+Node dependencies to fight — this is probably the better long-term fix).
+Also still needs `aws_cognito_identity_pool_id` set in
+`amplify-config.ts`, and that identity's IAM role needs
+`rekognition:DetectLabels` / `rekognition:DetectText` — worth confirming
+directly, since that's a different IAM role than the ones the backend's
+Lambdas run under.
 
 ### Known gaps vs. the real schema
 

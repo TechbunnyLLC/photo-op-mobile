@@ -21,3 +21,20 @@ export const MEDIA_BUCKET = awsconfig.aws_user_files_s3_bucket;
 // mock mode on unless explicitly turned off, since the placeholder config
 // can't reach anything real yet.
 export const USE_MOCK_API = process.env.EXPO_PUBLIC_USE_MOCK_API !== "false";
+
+// Client-side auto-tagging (lib/tagging.ts, via the official
+// @aws-sdk/client-rekognition package) is temporarily disabled. That SDK
+// bundles several Node.js-only internals unconditionally (a dead
+// credentials fallback, a dead default HTTP handler, an os/process-based
+// user-agent builder, and — the current blocker — a Node-only code path
+// inside its auth-scheme resolution that gets reached even after stubbing
+// the others) that don't exist in React Native. Each one has been
+// individually fixable via Metro resolver stubs (see metro.config.js and
+// lib/aws-stubs/), but they kept surfacing one layer deeper with no clear
+// end in sight, so tagging is switched off here rather than continuing
+// indefinitely. Upload and posting work normally without it — photos just
+// won't get auto-generated tags until this is revisited, either by
+// finishing the stub chain, or (probably the better fix) replacing the
+// official SDK call in lib/tagging.ts with a hand-written, dependency-free
+// signed request to Rekognition's API that never touches Node internals.
+export const ENABLE_CLIENT_TAGGING = false;

@@ -12,9 +12,8 @@ import {
   useColorScheme,
 } from "react-native";
 import { api } from "../../lib/api";
-import { MEDIA_BUCKET, USE_MOCK_API } from "../../lib/config";
+import { ENABLE_CLIENT_TAGGING, MEDIA_BUCKET, USE_MOCK_API } from "../../lib/config";
 import { uploadMediaFile } from "../../lib/storage";
-import { detectLabels, detectText } from "../../lib/tagging";
 import { radius, resolveTheme, spacing } from "../../lib/theme";
 
 export default function CaptureScreen() {
@@ -73,8 +72,14 @@ export default function CaptureScreen() {
       // 3. Tag it. The real backend expects the client to do this (no
       //    server-side tagging step exists) — see lib/tagging.ts. Best
       //    effort: a tagging failure shouldn't block the upload succeeding.
-      if (!USE_MOCK_API) {
+      if (!USE_MOCK_API && ENABLE_CLIENT_TAGGING) {
+        // Dynamic import, not a static one: importing lib/tagging.ts at
+        // all currently crashes (it pulls in @aws-sdk/client-rekognition —
+        // see the ENABLE_CLIENT_TAGGING comment in lib/config.ts). With
+        // the flag off, this branch never runs, so the import never
+        // happens and the module never loads.
         try {
+          const { detectLabels, detectText } = await import("../../lib/tagging");
           const [labels, text] = await Promise.all([
             detectLabels(MEDIA_BUCKET, `public/${imageKey}`),
             detectText(MEDIA_BUCKET, `public/${imageKey}`),
