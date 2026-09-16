@@ -66,19 +66,18 @@ pattern, not a real feed, but it exercises the whole flow).
 
 ## Connecting the real backend
 
-`lib/amplify-config.ts` needs real values from the backend's Amplify
-project (App ID `dhio6clqqxihz`, AWS account `652453621243`, region
-`us-west-2`) — either by running
+`lib/amplify-config.ts` is filled in with real values for the **test**
+environment (stack `amplify-photoop-test-94334`, App ID `dhio6clqqxihz`,
+AWS account `652453621243`, region `us-west-2`), pulled directly via the
+AWS CLI (Cognito User Pool + Identity Pool, AppSync GraphQL API, S3
+bucket). To switch to `prod`, pull the equivalent prod values the same
+way (or via `amplify pull --appId dhio6clqqxihz --envName prod` from
+within a checkout of the `backend` repo) and swap them into
+`lib/amplify-config.ts`.
 
-```
-amplify pull --appId dhio6clqqxihz --envName test   # or prod
-```
-
-from within a checkout of the `backend` repo (needs AWS credentials with
-access to that account), and copying the generated `aws-exports.js` values
-in, or by pulling the User Pool ID / AppSync endpoint & API key / S3 bucket
-name from the AWS Console directly. Once those are real, flip
-`EXPO_PUBLIC_USE_MOCK_API=false`.
+To actually hit AWS instead of local mock data, set
+`EXPO_PUBLIC_USE_MOCK_API=false` — this repo's `.env` (gitignored) already
+has it set. Delete or edit `.env` to switch back to mock mode.
 
 ### The tagging gap
 
