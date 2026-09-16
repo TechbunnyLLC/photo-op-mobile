@@ -86,7 +86,17 @@ export async function signIn(email: string, password: string): Promise<AuthUser>
     return mockCurrentUser;
   }
 
-  await amplifySignIn({ username: email, password });
+  // USER_PASSWORD_AUTH instead of the default USER_SRP_AUTH: SRP needs a
+  // native big-integer module (from @aws-amplify/react-native) that only
+  // works in a custom-built app, not Expo Go. USER_PASSWORD_AUTH sends the
+  // password over TLS instead of a zero-knowledge proof — still secure in
+  // transit, just a different tradeoff — and must be enabled on the
+  // Cognito app client (ALLOW_USER_PASSWORD_AUTH in ExplicitAuthFlows).
+  await amplifySignIn({
+    username: email,
+    password,
+    options: { authFlowType: "USER_PASSWORD_AUTH" },
+  });
   return getCurrentUser() as Promise<AuthUser>;
 }
 

@@ -79,6 +79,32 @@ To actually hit AWS instead of local mock data, set
 `EXPO_PUBLIC_USE_MOCK_API=false` — this repo's `.env` (gitignored) already
 has it set. Delete or edit `.env` to switch back to mock mode.
 
+Two things had to be fixed to get sign-in working against the real user
+pool, both worth knowing about if you're pointing this at a different
+Cognito user pool/client later:
+
+- **Sign-in uses `USER_PASSWORD_AUTH`, not the default `USER_SRP_AUTH`**
+  (see `lib/auth.ts`). Cognito's default SRP flow needs a native
+  big-integer module from `@aws-amplify/react-native` that only works in
+  a custom dev-client build, not Expo Go — it throws `"doesn't seem to be
+  linked"` there. `USER_PASSWORD_AUTH` sends the password over TLS
+  instead of a zero-knowledge proof (still secure in transit, just a
+  different tradeoff) and works fine in Expo Go, but it has to be enabled
+  on the Cognito app client first:
+  ```
+  aws cognito-idp update-user-pool-client --user-pool-id <pool id> \
+    --client-id <client id> --region us-west-2 \
+    --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_USER_SRP_AUTH \
+    ALLOW_REFRESH_TOKEN_AUTH ALLOW_CUSTOM_AUTH
+  ```
+- **`@react-native-async-storage/async-storage` must match the version
+  Expo Go bundles for this SDK** (`2.2.0` for SDK 57 — check
+  `node_modules/expo/bundledNativeModules.json`), not just "whatever npm
+  installs." A newer major version throws `"Native module is null,
+  cannot access legacy storage"` in Expo Go. Always install it with
+  `npx expo install @react-native-async-storage/async-storage` rather
+  than plain `npm install`.
+
 ### The tagging gap
 
 The backend has no server-side auto-tagging step. In the original app, the

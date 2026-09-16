@@ -28,8 +28,14 @@ export default function SignInScreen() {
     try {
       await signIn(email.trim(), password);
       router.replace("/(tabs)");
-    } catch (err) {
-      Alert.alert("Couldn't sign in", err instanceof Error ? err.message : "Unknown error");
+    } catch (err: any) {
+      // Amplify wraps some failures in a generic AuthError whose own
+      // .message is "An unknown error has occurred." — the real reason
+      // lives in .underlyingError instead, so prefer that when present.
+      const message =
+        err?.underlyingError?.message ??
+        (err instanceof Error ? err.message : "Unknown error");
+      Alert.alert("Couldn't sign in", message);
     } finally {
       setSubmitting(false);
     }
