@@ -1,5 +1,6 @@
+import { CameraView, useCameraPermissions } from "expo-camera";
 import * as ImagePicker from "expo-image-picker";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Alert,
   Image,
@@ -12,21 +13,30 @@ import {
 } from "react-native";
 import { api } from "../../lib/api";
 import { MEDIA_BUCKET, USE_MOCK_API } from "../../lib/config";
-import { resolveTheme, radius, spacing } from "../../lib/theme";
 import { uploadMediaFile } from "../../lib/storage";
 import { detectLabels, detectText } from "../../lib/tagging";
+import { radius, resolveTheme, spacing } from "../../lib/theme";
 
 export default function CaptureScreen() {
   const scheme = useColorScheme();
   const c = resolveTheme(scheme);
 
+  const [permission, requestPermission] = useCameraPermissions();
+  const [facing, setFacing] = useState<"front" | "back">("back");
+  const cameraRef = useRef<CameraView>(null);
+
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [caption, setCaption] = useState("");
   const [uploading, setUploading] = useState(false);
 
+  async function takePhoto() {
+    const photo = await cameraRef.current?.takePictureAsync({ quality: 0.9 });
+    if (photo?.uri) setLocalUri(photo.uri);
+  }
+
   async function pickImage() {
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
+    const libraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!libraryPermission.granted) {
       Alert.alert("Permission needed", "Photo-OP needs photo library access to attach media.");
       return;
     }
@@ -36,19 +46,6 @@ export default function CaptureScreen() {
       quality: 0.9,
     });
 
-    if (!result.canceled && result.assets[0]) {
-      setLocalUri(result.assets[0].uri);
-    }
-  }
-
-  async function takePhoto() {
-    const permission = await ImagePicker.requestCameraPermissionsAsync();
-    if (!permission.granted) {
-      Alert.alert("Permission needed", "Photo-OP needs camera access to capture the moment.");
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({ quality: 0.9 });
     if (!result.canceled && result.assets[0]) {
       setLocalUri(result.assets[0].uri);
     }
@@ -98,76 +95,135 @@ export default function CaptureScreen() {
     }
   }
 
-  return (
-    <View style={[styles.container, { backgroundColor: c.background }]}>
-      {localUri ? (
+  // Reviewing a just-captured/picked photo before posting.
+  if (localUri) {
+    return (
+      <View style={[styles.container, { backgroundColor: c.background }]}>
         <Image source={{ uri: localUri }} style={styles.preview} />
-      ) : (
-        <View style={[styles.placeholder, { borderColor: c.border, backgroundColor: c.surface }]}>
-          <Text style={{ color: c.textMuted }}>No media selected yet</Text>
-        </View>
-      )}
 
-      <View style={styles.actionRow}>
+        <TextInput
+          value={caption}
+          onChangeText={setCaption}
+          placeholder="Say something about this moment"
+          placeholderTextColor={c.textMuted}
+          style={[styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
+        />
+
+        <View style={styles.actionRow}>
+          <Pressable
+            onPress={() => setLocalUri(null)}
+            style={[styles.button, styles.buttonOutline, { borderColor: c.border }]}
+          >
+            <Text style={[styles.buttonText, { color: c.text }]}>Retake</Text>
+          </Pressable>
+          <Pressable
+            onPress={submit}
+            disabled={uploading}
+            style={[styles.button, { backgroundColor: c.accent, opacity: uploading ? 0.5 : 1 }]}
+          >
+            <Text style={[styles.buttonText, { color: c.accentText }]}>
+              {uploading ? "Uploading…" : "Post to feed"}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    );
+  }
+
+  // Camera permission not yet granted.
+  if (!permission) {
+    return <View style={[styles.container, { backgroundColor: c.background }]} />;
+  }
+  if (!permission.granted) {
+    return (
+      <View style={[styles.container, styles.centered, { backgroundColor: c.background }]}>
+        <Text style={[styles.permissionText, { color: c.text }]}>
+          Photo-OP needs camera access to capture the moment.
+        </Text>
         <Pressable
-          onPress={takePhoto}
-          style={[styles.button, { backgroundColor: c.accent }]}
+          onPress={requestPermission}
+          style={[styles.button, { backgroundColor: c.accent, marginTop: spacing.md }]}
         >
-          <Text style={[styles.buttonText, { color: c.accentText }]}>Take photo</Text>
+          <Text style={[styles.buttonText, { color: c.accentText }]}>Grant camera access</Text>
         </Pressable>
-        <Pressable
-          onPress={pickImage}
-          style={[styles.button, styles.buttonOutline, { borderColor: c.border }]}
-        >
-          <Text style={[styles.buttonText, { color: c.text }]}>Choose from library</Text>
+        <Pressable onPress={pickImage} style={styles.linkRow}>
+          <Text style={{ color: c.textMuted }}>
+            or <Text style={{ color: c.accent, fontWeight: "600" }}>choose from your library</Text>
+          </Text>
         </Pressable>
       </View>
+    );
+  }
 
-      <TextInput
-        value={caption}
-        onChangeText={setCaption}
-        placeholder="Say something about this moment"
-        placeholderTextColor={c.textMuted}
-        style={[styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
-      />
+  // Live camera view.
+  return (
+    <View style={[styles.container, { backgroundColor: c.background, padding: 0 }]}>
+      <CameraView ref={cameraRef} style={styles.camera} facing={facing} />
 
-      <Pressable
-        onPress={submit}
-        disabled={!localUri || uploading}
-        style={[
-          styles.button,
-          { backgroundColor: c.accent, opacity: !localUri || uploading ? 0.5 : 1, marginTop: spacing.md },
-        ]}
-      >
-        <Text style={[styles.buttonText, { color: c.accentText }]}>
-          {uploading ? "Uploading…" : "Post to feed"}
-        </Text>
-      </Pressable>
+      <View style={[styles.cameraControls, { backgroundColor: c.background }]}>
+        <Pressable
+          onPress={() => setFacing((f) => (f === "back" ? "front" : "back"))}
+          style={[styles.iconButton, { backgroundColor: c.surface, borderColor: c.border }]}
+        >
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: "600" }}>Flip</Text>
+        </Pressable>
+
+        <Pressable onPress={takePhoto} style={[styles.shutter, { borderColor: c.accent }]}>
+          <View style={[styles.shutterInner, { backgroundColor: c.accent }]} />
+        </Pressable>
+
+        <Pressable
+          onPress={pickImage}
+          style={[styles.iconButton, { backgroundColor: c.surface, borderColor: c.border }]}
+        >
+          <Text style={{ color: c.text, fontSize: 12, fontWeight: "600" }}>Library</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: spacing.md },
+  centered: { alignItems: "center", justifyContent: "center" },
+  permissionText: { textAlign: "center", fontSize: 15 },
+  camera: { flex: 1 },
+  cameraControls: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  shutter: {
+    width: 72,
+    height: 72,
+    borderRadius: radius.pill,
+    borderWidth: 4,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  shutterInner: {
+    width: 56,
+    height: 56,
+    borderRadius: radius.pill,
+  },
+  iconButton: {
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
   preview: {
     width: "100%",
     aspectRatio: 4 / 5,
     borderRadius: radius.lg,
     marginBottom: spacing.md,
   },
-  placeholder: {
-    width: "100%",
-    aspectRatio: 4 / 5,
-    borderRadius: radius.lg,
-    borderWidth: StyleSheet.hairlineWidth,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: spacing.md,
-  },
   actionRow: {
     flexDirection: "row",
     gap: spacing.sm,
-    marginBottom: spacing.md,
+    marginTop: spacing.md,
   },
   button: {
     flex: 1,
@@ -189,4 +245,5 @@ const styles = StyleSheet.create({
     padding: spacing.sm + 4,
     fontSize: 14,
   },
+  linkRow: { marginTop: spacing.lg, alignItems: "center" },
 });

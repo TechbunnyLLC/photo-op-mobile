@@ -8,6 +8,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useColorScheme } from "react-native";
 import awsconfig from "../lib/amplify-config";
+import { AuthProvider } from "../lib/auth-context";
 import { resolveTheme } from "../lib/theme";
 
 Amplify.configure(awsconfig);
@@ -17,7 +18,7 @@ export default function RootLayout() {
   const c = resolveTheme(scheme);
 
   return (
-    <>
+    <AuthProvider>
       <StatusBar style={scheme === "dark" ? "light" : "dark"} />
       <Stack
         screenOptions={{
@@ -26,8 +27,10 @@ export default function RootLayout() {
           contentStyle: { backgroundColor: c.background },
         }}
       >
+        <Stack.Screen name="index" options={{ headerShown: false }} />
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       </Stack>
-    </>
+    </AuthProvider>
   );
 }

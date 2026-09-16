@@ -9,35 +9,47 @@ Rekognition).
 
 ## Status
 
-Runs against **mock data** (`lib/mock-data.ts`) by default — `lib/amplify-config.ts`
-still has placeholder values, so there's nothing real to connect to yet.
-Nothing here has touched Figma; screens are laid out to a reasonable
-default, not a real design.
+Sign-up, sign-in, email confirmation, a live in-app camera, upload, and
+client-side tagging are all wired up end-to-end. Runs in **mock mode** by
+default (`lib/config.ts`) — `lib/amplify-config.ts` still has placeholder
+values, so nothing reaches AWS yet, but the whole flow (sign up → confirm →
+sign in → capture → upload → tag → see it in the feed) works against
+in-memory mock state right now in Expo Go. Nothing here has touched Figma;
+screens are laid out to a reasonable default, not a real design.
 
 ## Structure
 
 ```
 app/
-  _layout.tsx          root Stack; loads RN polyfills and calls Amplify.configure()
+  index.tsx             redirects to (auth) or (tabs) based on session state
+  _layout.tsx             root Stack; loads RN polyfills, Amplify.configure(), AuthProvider
+  (auth)/
+    _layout.tsx             redirects signed-in users to (tabs)
+    sign-in.tsx              email + password
+    sign-up.tsx              email + password, min 8 chars
+    confirm.tsx              email confirmation code (mock code: 123456)
   (tabs)/
-    _layout.tsx         bottom tab bar: Feed / Capture / Profile
-    index.tsx           Feed — scrollable list of MediaItem cards
-    capture.tsx          Capture — camera/library picker, upload, tag, post
-    profile.tsx           Profile — placeholder until auth screens exist
+    _layout.tsx             bottom tab bar; redirects signed-out users to (auth)
+    index.tsx               Feed — scrollable list of MediaItem cards
+    capture.tsx               Capture — live camera (expo-camera), library picker,
+                               caption, upload, tag, post
+    profile.tsx                real signed-in user + sign out
 components/
-  MediaCard.tsx         feed list item (thumbnail, uploader, tags, location)
+  MediaCard.tsx           feed list item (thumbnail, uploader, tags, location)
 lib/
-  amplify-config.ts     Amplify client config — PLACEHOLDER, see below
-  api.ts                GraphQL operations against the real schema (or mock)
-  config.ts             mock-mode toggle + derived S3 bucket name
+  amplify-config.ts       Amplify client config — PLACEHOLDER, see below
+  auth.ts                 sign-up/confirm/sign-in/sign-out (real Amplify Auth, or mock)
+  auth-context.tsx        React context exposing auth state app-wide
+  api.ts                  GraphQL operations against the real schema (or mock)
+  config.ts               mock-mode toggle + derived S3 bucket name
   graphql/
-    queries.ts            listMediaSortByDate, myMediaSortByDate, getMedia
-    mutations.ts           createMedia, updateMediaTags, like/unlike, save/unsave
-  storage.ts             S3 upload/URL helpers (Amplify Storage)
-  tagging.ts             client-side Rekognition tagging (see below)
-  mock-data.ts           fixture feed data
-  theme.ts               color tokens (split dark/light, no pure black)
-  types.ts               UI-facing MediaItem / CurrentUser shapes
+    queries.ts               listMediaSortByDate, myMediaSortByDate, getMedia
+    mutations.ts              createMedia, updateMediaTags, like/unlike, save/unsave
+  storage.ts               S3 upload/URL helpers (Amplify Storage)
+  tagging.ts               client-side Rekognition tagging (see below)
+  mock-data.ts             fixture feed data
+  theme.ts                 color tokens (split dark/light, no pure black)
+  types.ts                 UI-facing MediaItem / CurrentUser shapes
 ```
 
 ## Running it
@@ -46,6 +58,11 @@ lib/
 npm install
 npm run start   # then press i / a / w, or scan the QR code in Expo Go
 ```
+
+In mock mode: sign up with any email/password (8+ chars), confirm with code
+`123456`, sign in, then use the Capture tab — the camera needs a real device
+or simulator with camera support (the iOS Simulator's camera is a test
+pattern, not a real feed, but it exercises the whole flow).
 
 ## Connecting the real backend
 
@@ -62,10 +79,6 @@ access to that account), and copying the generated `aws-exports.js` values
 in, or by pulling the User Pool ID / AppSync endpoint & API key / S3 bucket
 name from the AWS Console directly. Once those are real, flip
 `EXPO_PUBLIC_USE_MOCK_API=false`.
-
-**Auth is not wired up yet** — there's no sign-in screen, so every
-Cognito-authenticated GraphQL call (create/update Media, likes/saves) will
-fail until that exists. That's the next real piece of work here.
 
 ### The tagging gap
 
@@ -87,7 +100,8 @@ different IAM role than the ones the backend's Lambdas run under.
   but there's no proper user profile lookup yet (real avatar, etc.).
 - Payments, subscriptions, likes/saves counters, search, and trending tags
   all have real backend support (see the architecture doc) but no UI here
-  yet — the scaffold only covers create + list + like/unlike so far.
+  yet — the scaffold only covers auth + create + list + like/unlike so far.
+- Password reset / "forgot password" isn't built yet.
 
 ## Git
 
