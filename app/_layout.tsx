@@ -3,23 +3,25 @@
 import "react-native-get-random-values";
 import "react-native-url-polyfill/auto";
 
+// Amplify itself is configured as a side effect of importing
+// lib/amplify-config.ts (see the comment there for why it lives there
+// now instead of here) — this import just needs to happen before
+// AuthProvider below, which is what actually exercises Amplify.
+import "../lib/amplify-config";
+
 import {
   Outfit_400Regular,
   Outfit_600SemiBold,
   Outfit_700Bold,
   useFonts,
 } from "@expo-google-fonts/outfit";
-import { Amplify } from "aws-amplify";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import { useColorScheme } from "react-native";
-import awsconfig from "../lib/amplify-config";
 import { AuthProvider } from "../lib/auth-context";
 import { resolveTheme } from "../lib/theme";
-
-Amplify.configure(awsconfig);
 
 // Keep the splash screen up until the brand font has finished loading,
 // so we never flash the system font before Outfit swaps in.

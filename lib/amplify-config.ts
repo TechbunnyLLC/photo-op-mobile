@@ -6,6 +6,8 @@
 // at prod instead, pull the equivalent prod values (Cognito User Pool,
 // Identity Pool, AppSync API, S3 bucket) and swap them in here.
 
+import { Amplify } from "aws-amplify";
+
 const awsconfig = {
   aws_project_region: "us-west-2",
 
@@ -29,5 +31,22 @@ const awsconfig = {
   aws_user_files_s3_bucket: "photo-op-user-created-media94334-test",
   aws_user_files_s3_bucket_region: "us-west-2",
 };
+
+// Configured as an import side effect, right here, rather than at the
+// app's entry point (app/_layout.tsx). This used to live there, one line
+// below where awsconfig gets imported — but ES module imports always
+// fully resolve before any of the *importing* file's own top-level code
+// runs, so anything else this same import chain pulls in ahead of that
+// line (lib/api.ts calls generateClient() at module scope, and
+// _layout.tsx's import of AuthProvider drags that in before its own
+// Amplify.configure() line is reached) was calling into Amplify before
+// it had been configured — harmless in practice (generateClient() holds
+// a live reference to the Amplify singleton, not a frozen snapshot, so
+// it still picks up the real config by the time any actual request
+// fires) but it printed a spurious "Amplify has not been configured"
+// warning on every launch. Configuring here instead — in the module that
+// every one of those import chains already has to load first to read
+// awsconfig itself — makes the warning impossible rather than harmless.
+Amplify.configure(awsconfig);
 
 export default awsconfig;
