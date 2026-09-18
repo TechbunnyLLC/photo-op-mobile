@@ -244,19 +244,30 @@ export const api = {
   },
 
   // The signed-in user's User-table record — holds the "system generated"
-  // username from the PostConfirmation Lambda (see lib/graphql/queries.ts).
-  // Returns null in mock mode / for a brand-new account whose User record
-  // hasn't landed yet — callers fall back to lib/media.ts's
-  // handleFromEmail in that case.
-  async getUserProfile(cognitoId: string): Promise<{ username: string | null; version?: number } | null> {
+  // username from the PostConfirmation Lambda and the profile picture key
+  // (see lib/graphql/queries.ts). Returns null in mock mode / for a
+  // brand-new account whose User record hasn't landed yet — callers fall
+  // back to lib/media.ts's handleFromEmail in that case.
+  async getUserProfile(
+    cognitoId: string
+  ): Promise<{ username: string | null; profileImageKey: string | null; version?: number } | null> {
     if (USE_MOCK_API) return null;
     const result = (await client.graphql({
       query: queries.getUser,
       variables: { cognitoId },
-    })) as { data: { getUser: { cognitoId: string; username: string | null; _version: number | null } | null } };
+    })) as {
+      data: {
+        getUser: {
+          cognitoId: string;
+          username: string | null;
+          profileImageKey: string | null;
+          _version: number | null;
+        } | null;
+      };
+    };
     const u = result.data.getUser;
     if (!u) return null;
-    return { username: u.username, version: u._version ?? undefined };
+    return { username: u.username, profileImageKey: u.profileImageKey, version: u._version ?? undefined };
   },
 
   // Best-effort uniqueness check before saving a custom username — mirrors
@@ -278,6 +289,29 @@ export const api = {
     return result.data.listUsers.items.length > 0;
   },
 
+  // Shared low-level User-record patch — both updateUsername and
+  // updateProfilePicture go through this so they stay on one mutation and
+  // one conflict-resolution (_version) path.
+  async updateUserProfile(
+    cognitoId: string,
+    patch: { username?: string; profileImageKey?: string },
+    version?: number
+  ): Promise<{ username: string | null; profileImageKey: string | null; version?: number }> {
+    if (USE_MOCK_API) {
+      return { username: patch.username ?? null, profileImageKey: patch.profileImageKey ?? null, version };
+    }
+    const result = (await client.graphql({
+      query: mutations.updateUser,
+      variables: { input: { cognitoId, ...patch, _version: version } },
+    })) as {
+      data: {
+        updateUser: { username: string | null; profileImageKey: string | null; _version: number | null };
+      };
+    };
+    const u = result.data.updateUser;
+    return { username: u.username, profileImageKey: u.profileImageKey, version: u._version ?? undefined };
+  },
+
   // Saves a customized username over the system-generated default. Caller
   // (the Profile screen, via lib/auth-context.tsx) is expected to have
   // already checked isUsernameTaken.
@@ -286,11 +320,30 @@ export const api = {
     username: string,
     version?: number
   ): Promise<{ username: string | null; version?: number }> {
-    if (USE_MOCK_API) return { username, version };
-    const result = (await client.graphql({
-      query: mutations.updateUser,
-      variables: { input: { cognitoId, username, _version: version } },
-    })) as { data: { updateUser: { username: string | null; _version: number | null } } };
-    return { username: result.data.updateUser.username, version: result.data.updateUser._version ?? undefined };
+    const result = await this.updateUserProfile(cognitoId, { username }, version);
+    return { username: result.username, version: result.version };
+  },
+
+  // Saves a newly uploaded profile picture's S3 key (see
+  // lib/auth-context.tsx's updateProfilePicture for the upload step).
+  async updateProfileImage(
+    cognitoId: string,
+    profileImageKey: string,
+    version?: number
+  ): Promise<{ profileImageKey: string | null; version?: number }> {
+    const result = await this.updateUserProfile(cognitoId, { profileImageKey }, version);
+    return { profileImageKey: result.profileImageKey, version: result.version };
+  },
+
+  // Deletes a post. Media's owner @auth rule grants the uploader full CRUD
+  // (see the backend schema), so this is a plain delete — no separate
+  // permission call needed beyond the ownership check already done
+  // client-side (app/media/[id].tsx's isOwner).
+  async deleteMedia(mediaId: string, version?: number): Promise<void> {
+    if (USE_MOCK_API) return;
+    await client.graphql({
+      query: mutations.deleteMedia,
+      variables: { input: { id: mediaId, _version: version } },
+    });
   },
 };

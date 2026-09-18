@@ -109,7 +109,21 @@ export const updateUser = /* GraphQL */ `
     updateUser(input: $input) {
       cognitoId
       username
+      profileImageKey
       _version
+    }
+  }
+`;
+
+// Lets the uploader delete their own post — Media's owner auth rule
+// permits full CRUD for the owner (see amplify/backend/api/photoop/
+// schema.graphql in the backend repo), so this needs no separate
+// permission check beyond the ownership check already done client-side
+// (see the isOwner check in app/media/[id].tsx).
+export const deleteMedia = /* GraphQL */ `
+  mutation DeleteMedia($input: DeleteMediaInput!) {
+    deleteMedia(input: $input) {
+      id
     }
   }
 `;

@@ -50,6 +50,7 @@ export default function MediaDetailScreen() {
   const [editingCredit, setEditingCredit] = useState(false);
   const [creditDraft, setCreditDraft] = useState("");
   const [savingCredit, setSavingCredit] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const isVideo = media?.mediaType === "video";
   const videoPlayer = useVideoPlayer(isVideo ? media?.url ?? null : null, (player) => {
@@ -154,6 +155,31 @@ export default function MediaDetailScreen() {
       setSavingCredit(false);
     }
   }, [media, creditDraft]);
+
+  const deleteThisPost = useCallback(() => {
+    if (!media) return;
+    Alert.alert(
+      "Delete this post?",
+      "This removes it from the feed and your profile for everyone. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            setDeleting(true);
+            try {
+              await api.deleteMedia(media.id, media._version);
+              router.back();
+            } catch (err) {
+              setDeleting(false);
+              Alert.alert("Couldn't delete", err instanceof Error ? err.message : "Unknown error");
+            }
+          },
+        },
+      ]
+    );
+  }, [media, router]);
 
   if (loading) {
     return (
@@ -327,6 +353,18 @@ export default function MediaDetailScreen() {
             )}
           </View>
 
+          {isOwner ? (
+            <Pressable
+              onPress={deleteThisPost}
+              disabled={deleting}
+              style={[styles.deleteButton, { borderColor: "#E5484D", opacity: deleting ? 0.6 : 1 }]}
+            >
+              <Text style={{ color: "#E5484D", fontWeight: "600", fontSize: 14 }}>
+                {deleting ? "Deleting…" : "Delete post"}
+              </Text>
+            </Pressable>
+          ) : null}
+
           <Pressable onPress={() => router.back()} style={styles.backLink}>
             <Text style={{ color: c.textMuted, fontSize: 13 }}>Back to feed</Text>
           </Pressable>
@@ -404,5 +442,12 @@ const styles = StyleSheet.create({
   creditButtonRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
   smallButton: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
   smallButtonOutline: { backgroundColor: "transparent", borderWidth: StyleSheet.hairlineWidth },
+  deleteButton: {
+    marginTop: spacing.lg,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 4,
+    alignItems: "center",
+  },
   backLink: { marginTop: spacing.lg, alignItems: "center" },
 });

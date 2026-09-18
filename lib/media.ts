@@ -1,31 +1,56 @@
 // Ports a few of next-web's media helpers (src/utils/media.ts) to the
-// mobile app: the default copyright/credit line, the share link, and the
-// viral-score heuristic shown on photo-op.ai's media detail panel. Kept
-// in sync by hand — this app doesn't share a package with next-web.
+// mobile app: the default copyright/credit line, the share link, the
+// viral-score heuristic, and the profile-picture URL convention. Kept in
+// sync by hand — this app doesn't share a package with next-web.
+
+import { MEDIA_BUCKET } from "./config";
 
 const WEB_DOMAIN = "photo-op.ai";
 
-// The mobile Cognito pool's "username" is just the sub (a UUID) — not
-// human-readable, unlike next-web's real username field (confirmed in
-// lib/api.ts's toMediaItem comment) — so the default credit handle here
-// is derived from the local part of the signed-in user's email instead,
-// the same fallback app/(tabs)/profile.tsx already uses for displayName.
+// Last-resort fallback only — used while the real username is still
+// loading from the User table. See generateFallbackHandle for the
+// fallback actually shown/persisted when the backend's own default is
+// missing or broken.
 export function handleFromEmail(email: string): string {
   return email.split("@")[0];
 }
 
-// The handle to sign new posts with: the user's own customized username
-// when they've set one (see lib/api.ts's getUserProfile/updateUsername and
-// the Profile screen), falling back to the email-derived handle for an
-// account that hasn't loaded/set one yet.
+// The backend's PostConfirmation Lambda (generate-username.js in the
+// backend repo) builds the "system generated" username as
+// `${firstName}${lastName[0]}${5 random digits}`. Mobile sign-up
+// (app/(auth)/sign-up.tsx) never collects a first/last name, so those
+// Cognito attributes are empty and that formula produces the literal
+// string "undefined64226" — a real bug users can see on the Profile
+// screen. This detects that (and any other empty/garbage value) so
+// lib/auth-context.tsx can self-heal it with generateFallbackHandle
+// instead of displaying it.
+export function isBrokenUsername(username: string | null | undefined): boolean {
+  if (!username) return true;
+  const trimmed = username.trim();
+  if (!trimmed) return true;
+  return /^undefined/i.test(trimmed);
+}
+
+// A clean, stable-looking replacement default — same 5-digit-suffix shape
+// as the backend's own generator, just anchored to the platform name
+// instead of a blank first/last name. e.g. "photoop48213".
+export function generateFallbackHandle(): string {
+  const digits = Math.floor(Math.random() * 90000) + 10000; // 10000-99999, matches generate-username.js's range
+  return `photoop${digits}`;
+}
+
+// The handle to sign new posts with / show on Profile: the user's own
+// customized (or self-healed) username once loaded — see
+// lib/api.ts's getUserProfile and lib/auth-context.tsx — falling back to
+// the email-derived handle only for the brief window before that's loaded.
 export function getDisplayHandle(username: string | null | undefined, email: string): string {
   return username || handleFromEmail(email);
 }
 
 // e.g. "photo-op.ai/@gregargyle" — matches the "© photo-op.ai/@toddeo"
 // watermark the backend burns into copyrighted media.
-export function getDefaultCopyright(email: string): string {
-  return `${WEB_DOMAIN}/@${handleFromEmail(email)}`;
+export function getDefaultCopyright(handle: string): string {
+  return `${WEB_DOMAIN}/@${handle}`;
 }
 
 export function getMediaPageUrl(mediaId: string): string {
@@ -73,4 +98,12 @@ export function formatCoordinates(lat: number, lng: number): string {
   const latLabel = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"}`;
   const lngLabel = `${Math.abs(lng).toFixed(4)}°${lng >= 0 ? "E" : "W"}`;
   return `${latLabel}, ${lngLabel}`;
+}
+
+// Mirrors next-web's getUserProfileImageURL (src/utils/user.ts) — same
+// "public/profile-pictures/<key>" convention, same bucket, so an avatar
+// set from either app shows up correctly in the other.
+export function getProfileImageUrl(profileImageKey: string | null | undefined): string | null {
+  if (!profileImageKey) return null;
+  return `https://${MEDIA_BUCKET}.s3.amazonaws.com/public/profile-pictures/${profileImageKey}`;
 }

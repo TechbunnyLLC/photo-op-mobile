@@ -109,6 +109,7 @@ export const getUser = /* GraphQL */ `
     getUser(cognitoId: $cognitoId) {
       cognitoId
       username
+      profileImageKey
       _version
     }
   }

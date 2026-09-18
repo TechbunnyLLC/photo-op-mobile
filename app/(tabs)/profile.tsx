@@ -1,3 +1,4 @@
+import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useCallback, useState } from "react";
 import {
@@ -26,7 +27,16 @@ export default function ProfileScreen() {
   const scheme = useColorScheme();
   const c = resolveTheme(scheme);
   const router = useRouter();
-  const { user, signOut, username, isLoadingUsername, updateUsername } = useAuth();
+  const {
+    user,
+    signOut,
+    username,
+    isLoadingUsername,
+    updateUsername,
+    avatarUrl,
+    isUploadingAvatar,
+    updateProfilePicture,
+  } = useAuth();
 
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +62,8 @@ export default function ProfileScreen() {
   }, [user]);
 
   // Reload every time the Profile tab gains focus, so a photo you just
-  // posted from Capture shows up here without a manual refresh.
+  // posted from Capture shows up here without a manual refresh, and a post
+  // you just deleted from the detail screen disappears from the grid.
   useFocusEffect(
     useCallback(() => {
       load().finally(() => setLoading(false));
@@ -98,6 +109,41 @@ export default function ProfileScreen() {
     }
   }
 
+  async function pickAndUploadAvatar(source: "camera" | "library") {
+    try {
+      let result: ImagePicker.ImagePickerResult;
+      if (source === "camera") {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert("Camera access needed", "Photo-OP needs camera access to take a profile photo.");
+          return;
+        }
+        result = await ImagePicker.launchCameraAsync({ mediaTypes: ["images"], quality: 0.9, allowsEditing: true, aspect: [1, 1] });
+      } else {
+        const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (!permission.granted) {
+          Alert.alert("Photo library access needed", "Photo-OP needs photo library access to set a profile picture.");
+          return;
+        }
+        result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.9, allowsEditing: true, aspect: [1, 1] });
+      }
+
+      if (result.canceled || !result.assets[0]) return;
+
+      await updateProfilePicture(result.assets[0].uri);
+    } catch (err) {
+      Alert.alert("Couldn't update profile picture", err instanceof Error ? err.message : "Unknown error");
+    }
+  }
+
+  function handleAvatarPress() {
+    Alert.alert("Profile picture", undefined, [
+      { text: "Take Photo", onPress: () => pickAndUploadAvatar("camera") },
+      { text: "Choose from Library", onPress: () => pickAndUploadAvatar("library") },
+      { text: "Cancel", style: "cancel" },
+    ]);
+  }
+
   return (
     <FlatList
       style={{ backgroundColor: c.background }}
@@ -110,11 +156,24 @@ export default function ProfileScreen() {
       ListHeaderComponent={
         <View>
           <View style={[styles.card, { backgroundColor: c.surface, borderColor: c.border }]}>
-            <View style={[styles.avatar, { backgroundColor: c.accent }]}>
-              <Text style={[styles.avatarText, { color: c.accentText }]}>
-                {displayName[0]?.toUpperCase()}
-              </Text>
-            </View>
+            <Pressable onPress={handleAvatarPress} disabled={isUploadingAvatar}>
+              {avatarUrl ? (
+                <Image source={{ uri: avatarUrl }} style={styles.avatarImage} />
+              ) : (
+                <View style={[styles.avatar, { backgroundColor: c.accent }]}>
+                  <Text style={[styles.avatarText, { color: c.accentText }]}>
+                    {displayName[0]?.toUpperCase()}
+                  </Text>
+                </View>
+              )}
+              <View style={[styles.avatarEditBadge, { backgroundColor: c.secondary, borderColor: c.surface }]}>
+                {isUploadingAvatar ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={styles.avatarEditBadgeText}>✎</Text>
+                )}
+              </View>
+            </Pressable>
             <Text style={[styles.name, { color: c.text }]}>{displayName}</Text>
             <Text style={[styles.email, { color: c.textMuted }]}>{user?.email}</Text>
 
@@ -191,7 +250,7 @@ export default function ProfileScreen() {
         // child FlatList's columnWrapperStyle lays out) — everything inside
         // it just fills that fixed-size box, no flex of its own. Tapping
         // any cell opens the same media detail screen the Feed uses
-        // (app/media/[id].tsx) — likes, price, location, credit, etc.
+        // (app/media/[id].tsx) — likes, price, location, credit, delete, etc.
         const inner = item.thumbnailUrl ? (
           <>
             <Image source={{ uri: item.thumbnailUrl }} style={styles.thumb} />
@@ -244,6 +303,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginBottom: spacing.sm,
   },
+  avatarImage: {
+    width: 64,
+    height: 64,
+    borderRadius: radius.pill,
+    marginBottom: spacing.sm,
+  },
+  avatarEditBadge: {
+    position: "absolute",
+    right: -2,
+    bottom: spacing.sm - 2,
+    width: 22,
+    height: 22,
+    borderRadius: radius.pill,
+    borderWidth: 2,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarEditBadgeText: { color: "#fff", fontSize: 11 },
   avatarText: { fontSize: 24, fontWeight: "700" },
   name: { fontSize: 17, fontWeight: "600" },
   email: { fontSize: 13 },
