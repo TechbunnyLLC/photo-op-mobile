@@ -220,16 +220,28 @@ export const api = {
   },
 
   // version must be the _version the record had when this call is made
-  // (createMedia's response, right after posting). This API has
+  // (createMedia's response, right after posting, or media._version off
+  // the detail screen for a manual edit). This API has
   // conflictResolution: AUTOMERGE enabled, which silently rejects/no-ops
   // any update mutation missing _version — that's exactly why tagging
   // looked like it "did nothing": Rekognition ran fine, but this write
   // back to the record was dropped with no error surfaced anywhere.
-  async updateTags(mediaId: string, arrayTags: string[], version?: number): Promise<void> {
+  //
+  // isGeneratedAITags tracks whether these tags came from Rekognition
+  // (capture.tsx's post-upload call, the default) or the uploader typed/
+  // edited them by hand (app/media/[id].tsx's edit-tags UI passes false)
+  // — mirrors the same flag next-web sets, minus the AI attribution once
+  // a person has touched the list.
+  async updateTags(
+    mediaId: string,
+    arrayTags: string[],
+    version?: number,
+    isGeneratedAITags: boolean = true
+  ): Promise<void> {
     if (USE_MOCK_API) return;
     await client.graphql({
       query: mutations.updateMediaTags,
-      variables: { input: { id: mediaId, arrayTags, isGeneratedAITags: true, _version: version } },
+      variables: { input: { id: mediaId, arrayTags, isGeneratedAITags, _version: version } },
     });
   },
 

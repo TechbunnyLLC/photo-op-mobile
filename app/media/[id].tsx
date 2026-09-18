@@ -56,6 +56,14 @@ export default function MediaDetailScreen() {
   const [priceDraft, setPriceDraft] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
 
+  // Tag editing — mirrors next-web's EditMediaModal (pill chips with a
+  // remove control, plus a text input to add new ones), see
+  // lib/api.ts's updateTags.
+  const [editingTags, setEditingTags] = useState(false);
+  const [tagsDraft, setTagsDraft] = useState<string[]>([]);
+  const [tagInput, setTagInput] = useState("");
+  const [savingTags, setSavingTags] = useState(false);
+
   // The real uploader identity — toMediaItem (lib/api.ts) only has the bare
   // ownerId to work with for the feed/profile list views, so this looks up
   // their actual username + avatar once here (one extra point-read, worth
@@ -203,6 +211,40 @@ export default function MediaDetailScreen() {
       setSavingPrice(false);
     }
   }, [media, priceDraft]);
+
+  const startEditingTags = useCallback(() => {
+    if (!media) return;
+    setTagsDraft(media.tags);
+    setTagInput("");
+    setEditingTags(true);
+  }, [media]);
+
+  const addTagFromInput = useCallback(() => {
+    const trimmed = tagInput.trim();
+    if (!trimmed) return;
+    setTagsDraft((tags) =>
+      tags.some((t) => t.toLowerCase() === trimmed.toLowerCase()) ? tags : [...tags, trimmed]
+    );
+    setTagInput("");
+  }, [tagInput]);
+
+  const removeTagFromDraft = useCallback((tag: string) => {
+    setTagsDraft((tags) => tags.filter((t) => t !== tag));
+  }, []);
+
+  const saveTags = useCallback(async () => {
+    if (!media) return;
+    setSavingTags(true);
+    try {
+      await api.updateTags(media.id, tagsDraft, media._version, false);
+      setMedia({ ...media, tags: tagsDraft });
+      setEditingTags(false);
+    } catch (err) {
+      Alert.alert("Couldn't save tags", err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setSavingTags(false);
+    }
+  }, [media, tagsDraft]);
 
   const deleteThisPost = useCallback(() => {
     if (!media) return;
@@ -387,16 +429,77 @@ export default function MediaDetailScreen() {
             </View>
           ) : null}
 
-          {media.tags.length > 0 ? (
+          {media.tags.length > 0 || isOwner ? (
             <View style={styles.section}>
-              <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Tags</Text>
-              <View style={styles.tagRow}>
-                {media.tags.map((tag) => (
-                  <View key={tag} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
-                    <Text style={[styles.tagText, { color: c.textMuted }]}>{tag}</Text>
-                  </View>
-                ))}
+              <View style={styles.sectionHeaderRow}>
+                <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Tags</Text>
+                {isOwner && !editingTags ? (
+                  <Pressable onPress={startEditingTags}>
+                    <Text style={{ color: c.secondary, fontSize: 12, fontWeight: "600" }}>Edit</Text>
+                  </Pressable>
+                ) : null}
               </View>
+
+              {editingTags ? (
+                <>
+                  <View style={styles.tagRow}>
+                    {tagsDraft.map((tag) => (
+                      <Pressable
+                        key={tag}
+                        onPress={() => removeTagFromDraft(tag)}
+                        style={[styles.tag, styles.removableTag, { backgroundColor: c.background, borderColor: c.border }]}
+                      >
+                        <Text style={[styles.tagText, { color: c.textMuted }]}>{tag}</Text>
+                        <Text style={[styles.tagRemoveX, { color: c.textMuted }]}>×</Text>
+                      </Pressable>
+                    ))}
+                  </View>
+                  <View style={styles.tagInputRow}>
+                    <TextInput
+                      value={tagInput}
+                      onChangeText={setTagInput}
+                      onSubmitEditing={addTagFromInput}
+                      placeholder="Add a tag"
+                      placeholderTextColor={c.textMuted}
+                      maxLength={30}
+                      autoCapitalize="none"
+                      returnKeyType="done"
+                      style={[styles.tagInput, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
+                    />
+                    <Pressable onPress={addTagFromInput} style={[styles.tagAddButton, { borderColor: c.border }]}>
+                      <Text style={{ color: c.secondary, fontWeight: "700" }}>Add</Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.creditButtonRow}>
+                    <Pressable
+                      onPress={() => setEditingTags(false)}
+                      style={[styles.smallButton, styles.smallButtonOutline, { borderColor: c.border }]}
+                    >
+                      <Text style={{ color: c.text, fontWeight: "600", fontSize: 13 }}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
+                      onPress={saveTags}
+                      disabled={savingTags}
+                      style={[styles.smallButton, { backgroundColor: c.accent, opacity: savingTags ? 0.6 : 1 }]}
+                    >
+                      <Text style={{ color: c.accentText, fontWeight: "600", fontSize: 13 }}>
+                        {savingTags ? "Saving…" : "Save"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </>
+              ) : (
+                <View style={styles.tagRow}>
+                  {media.tags.map((tag) => (
+                    <View key={tag} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
+                      <Text style={[styles.tagText, { color: c.textMuted }]}>{tag}</Text>
+                    </View>
+                  ))}
+                  {media.tags.length === 0 ? (
+                    <Text style={{ color: c.textMuted, fontSize: 13 }}>No tags yet.</Text>
+                  ) : null}
+                </View>
+              )}
             </View>
           ) : null}
 
@@ -522,6 +625,7 @@ const styles = StyleSheet.create({
   sectionLabel: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4 },
   sectionValue: { fontSize: 14 },
   coords: { fontSize: 12 },
+  sectionHeaderRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
   tagRow: { flexDirection: "row", flexWrap: "wrap", gap: spacing.xs, marginTop: 2 },
   tag: {
     borderRadius: radius.pill,
@@ -530,6 +634,23 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   tagText: { fontSize: 11, fontWeight: "500" },
+  removableTag: { flexDirection: "row", alignItems: "center", gap: 4 },
+  tagRemoveX: { fontSize: 13, fontWeight: "700", marginTop: -1 },
+  tagInputRow: { flexDirection: "row", gap: spacing.xs, marginTop: spacing.xs, alignItems: "center" },
+  tagInput: {
+    flex: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.xs + 4,
+    fontSize: 14,
+  },
+  tagAddButton: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 4,
+  },
   creditSection: {
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingTop: spacing.md,
