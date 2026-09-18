@@ -21,6 +21,13 @@
           "cameraPermission": "Photo-OP needs access to your camera to capture in-the-moment media.",
           "microphonePermission": "Photo-OP needs access to your microphone to record video with sound."
         }
+      ],
+      [
+        "@stripe/stripe-react-native",
+        {
+          "merchantIdentifier": "merchant.ai.photoop.app",
+          "enableGooglePay": true
+        }
       ]
     ],
     "ios": {

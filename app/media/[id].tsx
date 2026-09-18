@@ -1,3 +1,4 @@
+import { useStripe } from "@stripe/stripe-react-native";
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useCallback, useEffect, useState } from "react";
@@ -24,6 +25,7 @@ import {
   getMediaPageUrl,
   getMediaViralScore,
 } from "../../lib/media";
+import { getMediaPaymentSecret } from "../../lib/payment";
 import { radius, resolveTheme, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
 
@@ -38,10 +40,20 @@ export default function MediaDetailScreen() {
   const c = resolveTheme(scheme);
   const router = useRouter();
   const { user, username } = useAuth();
+  const { initPaymentSheet, presentPaymentSheet } = useStripe();
 
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Licensing purchase — mirrors next-web's Stripe checkout, minus the
+  // Elements UI (native PaymentSheet handles card entry/3DS instead). null
+  // means "haven't checked yet" (or nothing to check — not for sale, or
+  // this is the uploader's own post); true/false is the real answer from
+  // api.hasUserPurchasedMedia. See lib/payment.ts for the payment-intent
+  // call to the separate Payment microservice.
+  const [purchased, setPurchased] = useState<boolean | null>(null);
+  const [buying, setBuying] = useState(false);
 
   const [isLiked, setIsLiked] = useState(false);
   const [likeCount, setLikeCount] = useState(0);
@@ -93,6 +105,20 @@ export default function MediaDetailScreen() {
         if (user) {
           const liked = await api.isMediaLikedByMe(item.id, user.userId);
           if (!cancelled) setIsLiked(liked);
+
+          // Only worth checking when there's actually something to buy and
+          // this isn't the uploader's own post (isOwner isn't computed yet
+          // at this point in the effect, so this repeats that same check).
+          if (item.price && item.uploader.id !== user.userId) {
+            api
+              .hasUserPurchasedMedia(item.id, user.userId)
+              .then((owned) => {
+                if (!cancelled) setPurchased(owned);
+              })
+              .catch(() => {
+                // best effort — Buy button just stays visible if this fails
+              });
+          }
         }
 
         if (item.uploader.id && item.uploader.id !== "unknown") {
@@ -160,6 +186,48 @@ export default function MediaDetailScreen() {
   }, [media]);
 
   const isOwner = !!user && !!media && media.uploader.id === user.userId;
+
+  // Licensing purchase — gets a PaymentIntent clientSecret from the
+  // Payment microservice (lib/payment.ts), hands it to Stripe's native
+  // PaymentSheet (initPaymentSheet then presentPaymentSheet — the sheet
+  // itself collects card details and handles 3DS, same as next-web's
+  // Stripe Elements does on the web checkout modal), then marks this
+  // purchased locally. The backend's Stripe webhook is what actually
+  // flips the PaymentMedia record to "paid" server-side; this optimistic
+  // local flag just hides the Buy button immediately rather than making
+  // the user wait on a refetch.
+  const buyMedia = useCallback(async () => {
+    if (!media) return;
+    if (!user) {
+      Alert.alert("Sign in required", "Sign in to buy this media.");
+      return;
+    }
+    setBuying(true);
+    try {
+      const { clientSecret } = await getMediaPaymentSecret(media.id);
+      const initResult = await initPaymentSheet({
+        paymentIntentClientSecret: clientSecret,
+        merchantDisplayName: "Photo-OP",
+      });
+      if (initResult.error) {
+        throw new Error(initResult.error.message);
+      }
+      const presentResult = await presentPaymentSheet();
+      if (presentResult.error) {
+        // The user backing out of the sheet is not an error worth alerting on.
+        if (presentResult.error.code !== "Canceled") {
+          throw new Error(presentResult.error.message);
+        }
+        return;
+      }
+      setPurchased(true);
+      Alert.alert("Purchase complete", "You now own a license for this media.");
+    } catch (err) {
+      Alert.alert("Couldn't complete purchase", err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setBuying(false);
+    }
+  }, [media, user, initPaymentSheet, presentPaymentSheet]);
 
   const startEditingCredit = useCallback(() => {
     if (!media) return;
@@ -369,6 +437,28 @@ export default function MediaDetailScreen() {
               <Text style={[styles.scoreValue, { color: c.text }]}>{viralScore}</Text>
             </View>
           </View>
+
+          {/* Buy / owned — only for a for-sale post that isn't the
+              signed-in user's own upload. purchased === null means either
+              nothing to check yet or the check is still in flight, so the
+              button is simply omitted rather than flashing on then off. */}
+          {media.price && !isOwner ? (
+            purchased ? (
+              <View style={[styles.ownedPill, { borderColor: c.border, backgroundColor: c.surface }]}>
+                <Text style={[styles.ownedText, { color: c.textMuted }]}>✓ You own a license for this</Text>
+              </View>
+            ) : purchased === false ? (
+              <Pressable
+                onPress={buyMedia}
+                disabled={buying}
+                style={[styles.buyButton, { backgroundColor: c.accent, opacity: buying ? 0.6 : 1 }]}
+              >
+                <Text style={{ color: c.accentText, fontWeight: "700", fontSize: 15 }}>
+                  {buying ? "Processing…" : `Buy license — ${formatUsPrice(media.price)}`}
+                </Text>
+              </Pressable>
+            ) : null
+          ) : null}
 
           {editingPrice ? (
             <View style={styles.priceEditRow}>
@@ -620,6 +710,20 @@ const styles = StyleSheet.create({
   },
   scoreText: { fontSize: 12 },
   scoreValue: { fontSize: 13, fontWeight: "700" },
+  buyButton: {
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 4,
+    alignItems: "center",
+  },
+  ownedPill: {
+    marginTop: spacing.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingVertical: spacing.sm + 2,
+    alignItems: "center",
+  },
+  ownedText: { fontSize: 13, fontWeight: "600" },
   description: { fontSize: 14, lineHeight: 20, marginTop: spacing.xs },
   section: { marginTop: spacing.md, gap: 4 },
   sectionLabel: { fontSize: 11, fontWeight: "600", textTransform: "uppercase", letterSpacing: 0.4 },

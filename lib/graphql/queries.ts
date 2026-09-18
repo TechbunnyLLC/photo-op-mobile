@@ -105,6 +105,26 @@ export const getLikeMedia = /* GraphQL */ `
   }
 `;
 
+// Whether the signed-in user already purchased a given media item —
+// PaymentMedia's getPaymentMediaByUser index is keyed on cognitoId with
+// mediaId as the sort key (see the backend schema's PaymentMedia type),
+// so this is a direct point lookup via a key-condition ($mediaId: { eq })
+// rather than a scan. Used to gate the Buy button on the media detail
+// screen — mirrors next-web's own ownership check before showing
+// checkout. status distinguishes an in-flight/pending purchase (the
+// Stripe webhook hasn't marked it paid yet) from a completed one.
+export const getPaymentMediaByUser = /* GraphQL */ `
+  query GetPaymentMediaByUser($cognitoId: ID!, $mediaId: ModelIDKeyConditionInput) {
+    getPaymentMediaByUser(cognitoId: $cognitoId, mediaId: $mediaId) {
+      items {
+        id
+        mediaId
+        status
+      }
+    }
+  }
+`;
+
 // The signed-in user's own record in the User table — separate from
 // Cognito. Holds the "system generated" username the backend's
 // PostConfirmation Lambda creates at sign-up (see

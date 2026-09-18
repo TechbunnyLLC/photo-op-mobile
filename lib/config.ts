@@ -36,3 +36,18 @@ export const USE_MOCK_API = process.env.EXPO_PUBLIC_USE_MOCK_API !== "false";
 // only applies to photos; see the !isVideo guard in
 // app/(tabs)/capture.tsx.
 export const ENABLE_CLIENT_TAGGING = true;
+
+// Media licensing purchases go through a SEPARATE payment microservice —
+// not the Amplify GraphQL API — the same one next-web's own checkout flow
+// (src/components/providers/PaymentProvider.tsx) already calls: /config
+// returns the Stripe publishable key, /create-payment-intent (Cognito JWT
+// auth'd) creates the PaymentIntent + a backend Payment record and
+// returns { clientSecret, paymentId }. See lib/payment.ts.
+//
+// This is the **test** stack's URL (matches amplify-config.ts's test
+// values) — from next-web's src/configs.ts's PAYMENT_SERVICE_URL. Swap to
+// the prod URL there (…sr9dqisjd6…/prod/payment) alongside a prod
+// amplify-config.ts if this app ever points at production.
+export const PAYMENT_SERVICE_URL =
+  "https://ess4ko3qg4.execute-api.us-west-2.amazonaws.com/test/payment";
+

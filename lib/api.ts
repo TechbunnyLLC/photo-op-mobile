@@ -302,6 +302,20 @@ export const api = {
     return !!result.data.getLikeMedia;
   },
 
+  // Whether the signed-in user already bought this media item — gates the
+  // Buy button on the media detail screen (see lib/payment.ts for the
+  // actual checkout call). "pending" counts as already-purchased too, so
+  // the Buy button doesn't reappear mid-purchase while Stripe's webhook
+  // is still marking the PaymentMedia record "paid".
+  async hasUserPurchasedMedia(mediaId: string, cognitoId: string): Promise<boolean> {
+    if (USE_MOCK_API) return false;
+    const result = (await client.graphql({
+      query: queries.getPaymentMediaByUser,
+      variables: { cognitoId, mediaId: { eq: mediaId } },
+    })) as { data: { getPaymentMediaByUser: { items: { mediaId: string; status: string | null }[] } } };
+    return result.data.getPaymentMediaByUser.items.length > 0;
+  },
+
   // The signed-in user's User-table record — holds the "system generated"
   // username from the PostConfirmation Lambda and the profile picture key
   // (see lib/graphql/queries.ts). Returns null in mock mode / for a
