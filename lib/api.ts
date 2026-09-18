@@ -208,11 +208,17 @@ export const api = {
     });
   },
 
-  async updateTags(mediaId: string, arrayTags: string[]): Promise<void> {
+  // version must be the _version the record had when this call is made
+  // (createMedia's response, right after posting). This API has
+  // conflictResolution: AUTOMERGE enabled, which silently rejects/no-ops
+  // any update mutation missing _version — that's exactly why tagging
+  // looked like it "did nothing": Rekognition ran fine, but this write
+  // back to the record was dropped with no error surfaced anywhere.
+  async updateTags(mediaId: string, arrayTags: string[], version?: number): Promise<void> {
     if (USE_MOCK_API) return;
     await client.graphql({
       query: mutations.updateMediaTags,
-      variables: { input: { id: mediaId, arrayTags, isGeneratedAITags: true } },
+      variables: { input: { id: mediaId, arrayTags, isGeneratedAITags: true, _version: version } },
     });
   },
 

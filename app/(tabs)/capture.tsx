@@ -178,7 +178,7 @@ export default function CaptureScreen() {
             detectLabels(MEDIA_BUCKET, `public/${mediaKey}`),
             detectText(MEDIA_BUCKET, `public/${mediaKey}`),
           ]);
-          await api.updateTags(media.id, [...labels, ...text]);
+          await api.updateTags(media.id, [...labels, ...text], media._version);
         } catch (tagError) {
           console.warn("Tagging failed, media was still uploaded:", tagError);
         }

@@ -38,6 +38,7 @@ export const updateMediaTags = /* GraphQL */ `
       id
       arrayTags
       isGeneratedAITags
+      _version
     }
   }
 `;
