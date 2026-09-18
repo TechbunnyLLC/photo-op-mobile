@@ -1,24 +1,29 @@
-// Shared theme tokens. Split dark/light surfaces only — no pure black.
-// Swap these for the real Photo-OP brand palette once it exists.
+// Shared theme tokens — the real Photo-OP brand palette (pulled from
+// next-web's tailwind.config.ts: primary #f95f2e, secondary #0c8ce9).
+// Split dark/light surfaces only — no pure black, by design choice.
 
 export const colors = {
   light: {
-    background: "#F7F7F8",
+    background: "#EDF3FC",
     surface: "#FFFFFF",
-    text: "#16171B",
-    textMuted: "#6B6E76",
-    border: "#E4E4E8",
-    accent: "#FF5A36",
+    text: "#2D2D55",
+    textMuted: "#737373",
+    border: "#DCE3F0",
+    accent: "#F95F2E",
     accentText: "#FFFFFF",
+    secondary: "#0C8CE9",
+    secondaryText: "#FFFFFF",
   },
   dark: {
     background: "#15161A",
     surface: "#1F2025",
-    text: "#F2F2F4",
+    text: "#ECEDEE",
     textMuted: "#9A9CA5",
     border: "#2C2D33",
-    accent: "#FF7A54",
-    accentText: "#15161A",
+    accent: "#F95F2E",
+    accentText: "#FFFFFF",
+    secondary: "#0C8CE9",
+    secondaryText: "#FFFFFF",
   },
 } as const;
 

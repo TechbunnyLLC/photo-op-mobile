@@ -2,6 +2,7 @@ import { Link, useRouter } from "expo-router";
 import { useState } from "react";
 import {
   Alert,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -43,6 +44,11 @@ export default function SignInScreen() {
 
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
+      <Image
+        source={require("../../assets/branding/logo-mark.png")}
+        style={styles.logo}
+        resizeMode="contain"
+      />
       <Text style={[styles.title, { color: c.text }]}>Photo-OP</Text>
       <Text style={[styles.subtitle, { color: c.textMuted }]}>Welcome back</Text>
 
@@ -96,7 +102,8 @@ export default function SignInScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: spacing.lg, justifyContent: "center" },
-  title: { fontSize: 28, fontWeight: "700", textAlign: "center" },
+  logo: { width: 56, height: 63, alignSelf: "center", marginBottom: spacing.sm },
+  title: { fontSize: 28, fontWeight: "700", fontFamily: "Outfit_700Bold", textAlign: "center" },
   subtitle: { fontSize: 15, textAlign: "center", marginTop: spacing.xs, marginBottom: spacing.lg },
   mockNote: {
     fontSize: 12,

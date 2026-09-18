@@ -90,7 +90,7 @@ export default function SignUpScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: spacing.lg, justifyContent: "center" },
-  title: { fontSize: 24, fontWeight: "700", textAlign: "center" },
+  title: { fontSize: 24, fontWeight: "700", fontFamily: "Outfit_700Bold", textAlign: "center" },
   subtitle: {
     fontSize: 14,
     textAlign: "center",

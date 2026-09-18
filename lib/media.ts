@@ -1,0 +1,76 @@
+// Ports a few of next-web's media helpers (src/utils/media.ts) to the
+// mobile app: the default copyright/credit line, the share link, and the
+// viral-score heuristic shown on photo-op.ai's media detail panel. Kept
+// in sync by hand — this app doesn't share a package with next-web.
+
+const WEB_DOMAIN = "photo-op.ai";
+
+// The mobile Cognito pool's "username" is just the sub (a UUID) — not
+// human-readable, unlike next-web's real username field (confirmed in
+// lib/api.ts's toMediaItem comment) — so the default credit handle here
+// is derived from the local part of the signed-in user's email instead,
+// the same fallback app/(tabs)/profile.tsx already uses for displayName.
+export function handleFromEmail(email: string): string {
+  return email.split("@")[0];
+}
+
+// The handle to sign new posts with: the user's own customized username
+// when they've set one (see lib/api.ts's getUserProfile/updateUsername and
+// the Profile screen), falling back to the email-derived handle for an
+// account that hasn't loaded/set one yet.
+export function getDisplayHandle(username: string | null | undefined, email: string): string {
+  return username || handleFromEmail(email);
+}
+
+// e.g. "photo-op.ai/@gregargyle" — matches the "© photo-op.ai/@toddeo"
+// watermark the backend burns into copyrighted media.
+export function getDefaultCopyright(email: string): string {
+  return `${WEB_DOMAIN}/@${handleFromEmail(email)}`;
+}
+
+export function getMediaPageUrl(mediaId: string): string {
+  return `https://${WEB_DOMAIN}/posts/${mediaId}`;
+}
+
+// Same logarithmic-growth curve as next-web's getExponentialGrowthScore.
+function growthScore(value: number, max: number, scale = 100): number {
+  if (value <= 0) return 0;
+  return Math.round(Math.min((Math.log(value + 1) / Math.log(max + 1)) * scale, scale));
+}
+
+export interface ViralScoreInput {
+  createdAt: string;
+  capturedTime?: string | null;
+  viewCount?: number | null;
+  likeCount?: number | null;
+  saveCount?: number | null;
+}
+
+// Same 0-100 heuristic as next-web's getMediaViralScore, minus the
+// trending-tags factor — that one needs the site-wide list of currently
+// trending tags (a separate fetch the mobile feed doesn't make), and
+// next-web itself falls back to 0 for that factor whenever the list isn't
+// available, so this matches that fallback rather than diverging from it.
+export function getMediaViralScore(item: ViralScoreInput): number {
+  const viewScore = growthScore(item.viewCount ?? 0, 100);
+  const likeScore = growthScore(item.likeCount ?? 0, 50);
+  const saveScore = growthScore(item.saveCount ?? 0, 50);
+  const capturedAt = item.capturedTime ?? item.createdAt ?? new Date().toISOString();
+  const dayDiff = Math.abs(Date.now() - new Date(capturedAt).getTime()) / (1000 * 60 * 60 * 24);
+  const timeScore = 100 - growthScore(dayDiff, 365);
+  const trendingScore = 0; // see note above
+
+  return Math.round((timeScore + trendingScore + viewScore + likeScore + saveScore) / 5);
+}
+
+export function formatUsPrice(value: number): string {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(value || 0);
+}
+
+// e.g. "37.7680°N, 122.3878°W" — coordinates alongside the city label, for
+// the "global view of content" emphasis on the media detail screen.
+export function formatCoordinates(lat: number, lng: number): string {
+  const latLabel = `${Math.abs(lat).toFixed(4)}°${lat >= 0 ? "N" : "S"}`;
+  const lngLabel = `${Math.abs(lng).toFixed(4)}°${lng >= 0 ? "E" : "W"}`;
+  return `${latLabel}, ${lngLabel}`;
+}

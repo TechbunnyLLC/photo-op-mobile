@@ -21,19 +21,18 @@ export const MEDIA_BUCKET = awsconfig.aws_user_files_s3_bucket;
 // EXPO_PUBLIC_USE_MOCK_API=false (see .env) to hit the real test backend.
 export const USE_MOCK_API = process.env.EXPO_PUBLIC_USE_MOCK_API !== "false";
 
-// Client-side auto-tagging (lib/tagging.ts, via the official
-// @aws-sdk/client-rekognition package) is temporarily disabled. That SDK
-// bundles several Node.js-only internals unconditionally (a dead
-// credentials fallback, a dead default HTTP handler, an os/process-based
-// user-agent builder, and — the current blocker — a Node-only code path
-// inside its auth-scheme resolution that gets reached even after stubbing
-// the others) that don't exist in React Native. Each one has been
-// individually fixable via Metro resolver stubs (see metro.config.js and
-// lib/aws-stubs/), but they kept surfacing one layer deeper with no clear
-// end in sight, so tagging is switched off here rather than continuing
-// indefinitely. Upload and posting work normally without it — photos just
-// won't get auto-generated tags until this is revisited, either by
-// finishing the stub chain, or (probably the better fix) replacing the
-// official SDK call in lib/tagging.ts with a hand-written, dependency-free
-// signed request to Rekognition's API that never touches Node internals.
-export const ENABLE_CLIENT_TAGGING = false;
+// Client-side auto-tagging (lib/tagging.ts) calls Rekognition's
+// DetectLabels/DetectText directly. It used to go through the official
+// @aws-sdk/client-rekognition package, but that SDK bundles several
+// Node.js-only internals unconditionally (a dead credentials fallback, a
+// dead default HTTP handler, an os/process-based user-agent builder, and a
+// Node-only code path inside its auth-scheme resolution) that don't exist
+// in React Native — each one was individually fixable via Metro resolver
+// stubs (see metro.config.js and lib/aws-stubs/), but they kept surfacing
+// one layer deeper with no clear end in sight. lib/tagging.ts now signs
+// the Rekognition request by hand (AWS Signature Version 4, via the
+// pure-JS crypto-js package) instead, which sidesteps the SDK — and its
+// Node internals — entirely. Rekognition is image-only, so this still
+// only applies to photos; see the !isVideo guard in
+// app/(tabs)/capture.tsx.
+export const ENABLE_CLIENT_TAGGING = true;

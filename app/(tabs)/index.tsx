@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { MediaCard } from "../../components/MediaCard";
 import { api } from "../../lib/api";
@@ -12,15 +13,32 @@ export default function FeedScreen() {
   const [items, setItems] = useState<MediaItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    const feed = await api.getFeed();
-    setItems(feed);
+    try {
+      const feed = await api.getFeed();
+      setItems(feed);
+      setError(null);
+    } catch (err: any) {
+      // TEMP diagnostic logging — remove once real-backend feed works.
+      console.error("Feed load error (raw):", err);
+      console.error("Feed load error.errors (GraphQL):", err?.errors);
+      const message =
+        err?.errors?.[0]?.message ??
+        (err instanceof Error ? err.message : "Unknown error");
+      setError(message);
+    }
   }, []);
 
-  useEffect(() => {
-    load().finally(() => setLoading(false));
-  }, [load]);
+  // Reload every time the Feed tab gains focus (not just on first mount) —
+  // otherwise a photo you just posted from the Capture tab won't show up
+  // until you manually pull to refresh.
+  useFocusEffect(
+    useCallback(() => {
+      load().finally(() => setLoading(false));
+    }, [load])
+  );
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -39,7 +57,9 @@ export default function FeedScreen() {
         ListEmptyComponent={
           !loading ? (
             <Text style={[styles.empty, { color: c.textMuted }]}>
-              Nothing in the feed yet. Be the first to capture the moment.
+              {error
+                ? `Couldn't load the feed: ${error}`
+                : "Nothing in the feed yet. Be the first to capture the moment."}
             </Text>
           ) : null
         }

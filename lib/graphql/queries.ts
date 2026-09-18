@@ -14,6 +14,8 @@ export const mediaFields = /* GraphQL */ `
   imageKey
   mediaType
   status
+  isGeneratedThumbnails
+  _version
   owner
   createdAt
   long
@@ -28,6 +30,7 @@ export const mediaFields = /* GraphQL */ `
   width
   height
   categories
+  copyrightText
 `;
 
 // Public feed, newest first (uses the schema's listMediaSortByDate index).
@@ -78,6 +81,50 @@ export const getMedia = /* GraphQL */ `
   query GetMedia($id: ID!) {
     getMedia(id: $id) {
       ${mediaFields}
+    }
+  }
+`;
+
+// Whether the signed-in user (cognitoId) already likes a given media item —
+// LikeMedia's primary key is cognitoId + mediaId, so this is a direct
+// point lookup, not a scan/filter. Returns null (not an error) when no
+// such like exists.
+export const getLikeMedia = /* GraphQL */ `
+  query GetLikeMedia($cognitoId: ID!, $mediaId: ID!) {
+    getLikeMedia(cognitoId: $cognitoId, mediaId: $mediaId) {
+      cognitoId
+      mediaId
+    }
+  }
+`;
+
+// The signed-in user's own record in the User table — separate from
+// Cognito. Holds the "system generated" username the backend's
+// PostConfirmation Lambda creates at sign-up (see
+// amplify/backend/function/.../generate-username.js in the backend repo:
+// firstName + first letter of lastName + 5 random digits), which is what
+// lib/media.ts's getDefaultCopyright signs new posts with by default.
+export const getUser = /* GraphQL */ `
+  query GetUser($cognitoId: ID!) {
+    getUser(cognitoId: $cognitoId) {
+      cognitoId
+      username
+      _version
+    }
+  }
+`;
+
+// Used to check a candidate username isn't already taken before saving it
+// (see lib/api.ts's isUsernameTaken) — mirrors next-web's
+// validateUsername service. There's no uniqueness index on User.username
+// in the schema, so this is a best-effort client-side check, same as web.
+export const listUsersByUsername = /* GraphQL */ `
+  query ListUsersByUsername($filter: ModelUserFilterInput, $limit: Int) {
+    listUsers(filter: $filter, limit: $limit) {
+      items {
+        cognitoId
+        username
+      }
     }
   }
 `;

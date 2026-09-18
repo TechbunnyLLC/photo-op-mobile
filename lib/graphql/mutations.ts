@@ -16,6 +16,21 @@ export const createMedia = /* GraphQL */ `
   }
 `;
 
+// Videos need one more step after createMedia: the backend's
+// PostCreateMedia Lambda only watermarks/thumbnails a video on a DynamoDB
+// Streams MODIFY event where status is "pending" (images process
+// immediately on the INSERT from createMedia instead — see
+// lib/api.ts). This flips status from "draft" to "pending" to fire that
+// MODIFY event once the raw video file is sitting in S3.
+export const updateMediaStatus = /* GraphQL */ `
+  mutation UpdateMediaStatus($input: UpdateMediaInput!) {
+    updateMedia(input: $input) {
+      id
+      status
+    }
+  }
+`;
+
 // Called once client-side Rekognition tagging (lib/tagging.ts) finishes.
 export const updateMediaTags = /* GraphQL */ `
   mutation UpdateMediaTags($input: UpdateMediaInput!) {
@@ -23,6 +38,20 @@ export const updateMediaTags = /* GraphQL */ `
       id
       arrayTags
       isGeneratedAITags
+    }
+  }
+`;
+
+// Lets the uploader override the auto-generated copyright/credit line
+// (see lib/media.ts's getDefaultCopyright) after the fact. Mirrors
+// next-web's copyrightText editing, minus its pro-plan gate — see the
+// ownership check in app/media/[id].tsx for who's allowed to call this.
+export const updateMediaCopyright = /* GraphQL */ `
+  mutation UpdateMediaCopyright($input: UpdateMediaInput!) {
+    updateMedia(input: $input) {
+      id
+      copyrightText
+      _version
     }
   }
 `;
@@ -68,6 +97,19 @@ export const increaseViewCount = /* GraphQL */ `
     increaseViewCount(id: $id) {
       id
       viewCount
+    }
+  }
+`;
+
+// Lets the user customize the system-generated username afterward (see the
+// getUser query's comment). cognitoId is User's @primaryKey, not "id" —
+// UpdateUserInput uses that field name directly.
+export const updateUser = /* GraphQL */ `
+  mutation UpdateUser($input: UpdateUserInput!) {
+    updateUser(input: $input) {
+      cognitoId
+      username
+      _version
     }
   }
 `;
