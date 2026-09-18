@@ -57,6 +57,11 @@ export function getMediaPageUrl(mediaId: string): string {
   return `https://${WEB_DOMAIN}/posts/${mediaId}`;
 }
 
+// e.g. "https://photo-op.ai/@gregargyle" — for sharing a public profile.
+export function getPublicProfileUrl(username: string): string {
+  return `https://${WEB_DOMAIN}/@${username}`;
+}
+
 // Same logarithmic-growth curve as next-web's getExponentialGrowthScore.
 function growthScore(value: number, max: number, scale = 100): number {
   if (value <= 0) return 0;

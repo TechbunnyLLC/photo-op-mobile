@@ -127,3 +127,17 @@ export const deleteMedia = /* GraphQL */ `
     }
   }
 `;
+
+// Lets the uploader set/change the asking price on their own post —
+// pricing itself is already fully implemented on the backend (Media.price
+// on the schema); this was just missing a client mutation. Mirrors
+// updateMediaCopyright's pattern.
+export const updateMediaPrice = /* GraphQL */ `
+  mutation UpdateMediaPrice($input: UpdateMediaInput!) {
+    updateMedia(input: $input) {
+      id
+      price
+      _version
+    }
+  }
+`;

@@ -119,12 +119,21 @@ export const getUser = /* GraphQL */ `
 // (see lib/api.ts's isUsernameTaken) — mirrors next-web's
 // validateUsername service. There's no uniqueness index on User.username
 // in the schema, so this is a best-effort client-side check, same as web.
+// Doubles as the uniqueness check (lib/api.ts's isUsernameTaken) and the
+// public-profile lookup (getUserByUsername) — both just need "find the
+// User record with this username", the only difference is which fields
+// they read back. Never add email here: this is reachable by anyone
+// viewing a public profile, and next-web's own [username] page shows the
+// uploader's email on the equivalent public page today — don't repeat
+// that leak here.
 export const listUsersByUsername = /* GraphQL */ `
   query ListUsersByUsername($filter: ModelUserFilterInput, $limit: Int) {
     listUsers(filter: $filter, limit: $limit) {
       items {
         cognitoId
         username
+        profileImageKey
+        createdAt
       }
     }
   }

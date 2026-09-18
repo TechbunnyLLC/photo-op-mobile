@@ -42,6 +42,7 @@ export default function CaptureScreen() {
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [mediaKind, setMediaKind] = useState<"photo" | "video">("photo");
   const [caption, setCaption] = useState("");
+  const [price, setPrice] = useState("");
   const [uploading, setUploading] = useState(false);
 
   // Hooks can't be called conditionally, so this is created unconditionally
@@ -118,6 +119,14 @@ export default function CaptureScreen() {
 
   async function submit() {
     if (!localUri) return;
+
+    const trimmedPrice = price.trim();
+    const parsedPrice = trimmedPrice ? Number(trimmedPrice) : undefined;
+    if (trimmedPrice && (Number.isNaN(parsedPrice) || (parsedPrice as number) < 0)) {
+      Alert.alert("Enter a valid price", "Use a number like 25 or 25.00, or leave it blank for not-for-sale.");
+      return;
+    }
+
     setUploading(true);
     try {
       const isVideo = mediaKind === "video";
@@ -142,6 +151,10 @@ export default function CaptureScreen() {
         // getDefaultCopyright(username) default. Customizable afterward
         // from the media detail screen (app/media/[id].tsx).
         copyrightText: user ? getDefaultCopyright(getDisplayHandle(username, user.email)) : undefined,
+        // Pricing is already fully implemented on the backend (Media.price)
+        // — this is just the client UI for setting it at post time.
+        // Editable afterward from the media detail screen too.
+        price: parsedPrice,
       });
 
       // 3. Videos need an explicit nudge: the watermarking Lambda only
@@ -173,6 +186,7 @@ export default function CaptureScreen() {
 
       setLocalUri(null);
       setCaption("");
+      setPrice("");
       setMediaKind("photo");
       Alert.alert(
         "Posted!",
@@ -227,6 +241,18 @@ export default function CaptureScreen() {
           placeholderTextColor={c.textMuted}
           style={[styles.input, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
         />
+
+        <View style={styles.priceRow}>
+          <Text style={{ color: c.textMuted, fontSize: 14 }}>$</Text>
+          <TextInput
+            value={price}
+            onChangeText={setPrice}
+            keyboardType="decimal-pad"
+            placeholder="Price (optional) — leave blank if not for sale"
+            placeholderTextColor={c.textMuted}
+            style={[styles.priceInput, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
+          />
+        </View>
 
         <View style={styles.actionRow}>
           <Pressable
@@ -422,6 +448,19 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   input: {
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    padding: spacing.sm + 4,
+    fontSize: 14,
+  },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  priceInput: {
+    flex: 1,
     borderWidth: StyleSheet.hairlineWidth,
     borderRadius: radius.md,
     padding: spacing.sm + 4,

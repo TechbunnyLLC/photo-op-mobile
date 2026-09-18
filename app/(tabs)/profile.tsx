@@ -175,7 +175,6 @@ export default function ProfileScreen() {
               </View>
             </Pressable>
             <Text style={[styles.name, { color: c.text }]}>{displayName}</Text>
-            <Text style={[styles.email, { color: c.textMuted }]}>{user?.email}</Text>
 
             {/* Username — starts out as the backend's system-generated
                 handle (see lib/graphql/queries.ts's getUser comment) and
@@ -228,6 +227,14 @@ export default function ProfileScreen() {
                 </View>
               )}
             </View>
+
+            {!isLoadingUsername ? (
+              <Pressable onPress={() => router.push(`/profile/${displayHandle}`)} style={styles.publicLinkRow}>
+                <Text style={{ color: c.secondary, fontSize: 12, fontWeight: "600" }}>
+                  View my public profile →
+                </Text>
+              </Pressable>
+            ) : null}
           </View>
 
           <Text style={[styles.sectionTitle, { color: c.text }]}>
@@ -323,7 +330,7 @@ const styles = StyleSheet.create({
   avatarEditBadgeText: { color: "#fff", fontSize: 11 },
   avatarText: { fontSize: 24, fontWeight: "700" },
   name: { fontSize: 17, fontWeight: "600" },
-  email: { fontSize: 13 },
+  publicLinkRow: { marginTop: spacing.sm },
   usernameBlock: { marginTop: spacing.sm, alignItems: "center", width: "100%" },
   usernameRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
   usernameText: { fontSize: 14, fontWeight: "600" },

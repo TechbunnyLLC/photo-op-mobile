@@ -152,6 +152,10 @@ export const api = {
     // Auto-filled by the caller from lib/media.ts's getDefaultCopyright —
     // "photo-op.ai/@<handle>" — before this is called. See capture.tsx.
     copyrightText?: string;
+    // Optional asking price — pricing itself is fully implemented on the
+    // backend (Media.price); this just lets the uploader set it at post
+    // time. Omitted/undefined means not for sale, same as $0.
+    price?: number;
   }): Promise<MediaItem> {
     if (USE_MOCK_API) {
       const item: MediaItem = {
@@ -165,6 +169,7 @@ export const api = {
         uploader: { id: "me", displayName: "you" },
         createdAt: new Date().toISOString(),
         copyrightText: input.copyrightText,
+        price: input.price,
         likeCount: 0,
         saveCount: 0,
         viewCount: 0,
@@ -219,6 +224,18 @@ export const api = {
     await client.graphql({
       query: mutations.updateMediaCopyright,
       variables: { input: { id: mediaId, copyrightText, _version: version } },
+    });
+  },
+
+  // Saves the uploader's asking price after the fact — mirrors
+  // updateMediaCopyright's pattern. Pricing itself already exists on the
+  // backend; capture.tsx sets it at post time and this covers changing it
+  // later from the media detail screen.
+  async updateMediaPrice(mediaId: string, price: number, version?: number): Promise<void> {
+    if (USE_MOCK_API) return;
+    await client.graphql({
+      query: mutations.updateMediaPrice,
+      variables: { input: { id: mediaId, price, _version: version } },
     });
   },
 
@@ -287,6 +304,30 @@ export const api = {
       },
     })) as { data: { listUsers: { items: { cognitoId: string }[] } } };
     return result.data.listUsers.items.length > 0;
+  },
+
+  // Resolves a public profile route (app/profile/[username].tsx) to the
+  // account behind it. Same listUsers-filtered-by-username lookup as
+  // next-web's getUserDetailsByUsernameServerSide, but the query
+  // (lib/graphql/queries.ts's listUsersByUsername) deliberately never asks
+  // for email — see that query's comment.
+  async getUserByUsername(
+    username: string
+  ): Promise<{ cognitoId: string; username: string; profileImageKey: string | null; createdAt: string | null } | null> {
+    if (USE_MOCK_API) return null;
+    const result = (await client.graphql({
+      query: queries.listUsersByUsername,
+      variables: { filter: { username: { eq: username.toLowerCase() } }, limit: 1 },
+    })) as {
+      data: {
+        listUsers: {
+          items: { cognitoId: string; username: string | null; profileImageKey: string | null; createdAt: string | null }[];
+        };
+      };
+    };
+    const u = result.data.listUsers.items[0];
+    if (!u || !u.username) return null;
+    return { cognitoId: u.cognitoId, username: u.username, profileImageKey: u.profileImageKey, createdAt: u.createdAt };
   },
 
   // Shared low-level User-record patch — both updateUsername and

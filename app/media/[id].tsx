@@ -52,6 +52,17 @@ export default function MediaDetailScreen() {
   const [savingCredit, setSavingCredit] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [priceDraft, setPriceDraft] = useState("");
+  const [savingPrice, setSavingPrice] = useState(false);
+
+  // The real uploader identity — toMediaItem (lib/api.ts) only has the bare
+  // ownerId to work with for the feed/profile list views, so this looks up
+  // their actual username + avatar once here (one extra point-read, worth
+  // it on a screen the user's already committed to viewing) and links
+  // through to their public profile (app/profile/[username].tsx).
+  const [uploaderProfile, setUploaderProfile] = useState<{ username: string | null; profileImageKey: string | null } | null>(null);
+
   const isVideo = media?.mediaType === "video";
   const videoPlayer = useVideoPlayer(isVideo ? media?.url ?? null : null, (player) => {
     player.loop = true;
@@ -74,6 +85,17 @@ export default function MediaDetailScreen() {
         if (user) {
           const liked = await api.isMediaLikedByMe(item.id, user.userId);
           if (!cancelled) setIsLiked(liked);
+        }
+
+        if (item.uploader.id && item.uploader.id !== "unknown") {
+          api
+            .getUserProfile(item.uploader.id)
+            .then((p) => {
+              if (!cancelled) setUploaderProfile(p);
+            })
+            .catch(() => {
+              // best effort — falls back to the existing displayName placeholder
+            });
         }
       } catch (err: any) {
         if (cancelled) return;
@@ -156,6 +178,32 @@ export default function MediaDetailScreen() {
     }
   }, [media, creditDraft]);
 
+  const startEditingPrice = useCallback(() => {
+    if (!media) return;
+    setPriceDraft(media.price ? String(media.price) : "");
+    setEditingPrice(true);
+  }, [media]);
+
+  const savePrice = useCallback(async () => {
+    if (!media) return;
+    const trimmed = priceDraft.trim();
+    const parsed = trimmed ? Number(trimmed) : 0;
+    if (Number.isNaN(parsed) || parsed < 0) {
+      Alert.alert("Enter a valid price", "Use a number like 25 or 25.00, or leave it blank for not-for-sale.");
+      return;
+    }
+    setSavingPrice(true);
+    try {
+      await api.updateMediaPrice(media.id, parsed, media._version);
+      setMedia({ ...media, price: parsed });
+      setEditingPrice(false);
+    } catch (err) {
+      Alert.alert("Couldn't save price", err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setSavingPrice(false);
+    }
+  }, [media, priceDraft]);
+
   const deleteThisPost = useCallback(() => {
     if (!media) return;
     Alert.alert(
@@ -227,7 +275,15 @@ export default function MediaDetailScreen() {
               {(media.viewCount ?? 0).toLocaleString()} {media.viewCount === 1 ? "view" : "views"}
             </Text>
             <Text style={[styles.metaText, { color: c.textMuted }]}> · </Text>
-            <Text style={[styles.metaText, { color: c.textMuted }]}>{media.uploader.displayName}</Text>
+            {uploaderProfile?.username ? (
+              <Pressable onPress={() => router.push(`/profile/${uploaderProfile.username}`)}>
+                <Text style={[styles.metaText, styles.metaLink, { color: c.secondary }]}>
+                  @{uploaderProfile.username}
+                </Text>
+              </Pressable>
+            ) : (
+              <Text style={[styles.metaText, { color: c.textMuted }]}>{media.uploader.displayName}</Text>
+            )}
           </View>
 
           {/* actions: like (thumbs up), share */}
@@ -256,14 +312,50 @@ export default function MediaDetailScreen() {
 
           {/* price + viral score */}
           <View style={styles.statRow}>
-            <Text style={[styles.price, { color: c.accent }]}>
-              {media.price ? formatUsPrice(media.price) : "Not for sale"}
-            </Text>
+            <View style={styles.priceRow}>
+              <Text style={[styles.price, { color: c.accent }]}>
+                {media.price ? formatUsPrice(media.price) : "Not for sale"}
+              </Text>
+              {isOwner ? (
+                <Pressable onPress={startEditingPrice} hitSlop={8}>
+                  <Text style={{ color: c.secondary, fontWeight: "600", fontSize: 13 }}>Edit</Text>
+                </Pressable>
+              ) : null}
+            </View>
             <View style={[styles.scorePill, { borderColor: c.border, backgroundColor: c.surface }]}>
               <Text style={[styles.scoreText, { color: c.textMuted }]}>Viral score</Text>
               <Text style={[styles.scoreValue, { color: c.text }]}>{viralScore}</Text>
             </View>
           </View>
+
+          {editingPrice ? (
+            <View style={styles.priceEditRow}>
+              <Text style={{ color: c.textMuted, fontSize: 14 }}>$</Text>
+              <TextInput
+                value={priceDraft}
+                onChangeText={setPriceDraft}
+                keyboardType="decimal-pad"
+                placeholder="0.00"
+                placeholderTextColor={c.textMuted}
+                style={[styles.priceInput, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
+              />
+              <Pressable
+                onPress={() => setEditingPrice(false)}
+                style={[styles.smallButton, styles.smallButtonOutline, { borderColor: c.border }]}
+              >
+                <Text style={{ color: c.text, fontWeight: "600", fontSize: 13 }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={savePrice}
+                disabled={savingPrice}
+                style={[styles.smallButton, { backgroundColor: c.accent, opacity: savingPrice ? 0.6 : 1 }]}
+              >
+                <Text style={{ color: c.accentText, fontWeight: "600", fontSize: 13 }}>
+                  {savingPrice ? "Saving…" : "Save"}
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
 
           {media.caption ? (
             <Text style={[styles.description, { color: c.text }]}>{media.caption}</Text>
@@ -383,8 +475,9 @@ const styles = StyleSheet.create({
   mediaPlaceholder: { alignItems: "center", justifyContent: "center" },
   body: { padding: spacing.lg, gap: spacing.sm },
   title: { fontSize: 20, fontWeight: "700", fontFamily: "Outfit_700Bold" },
-  metaRow: { flexDirection: "row", flexWrap: "wrap" },
+  metaRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   metaText: { fontSize: 13 },
+  metaLink: { fontWeight: "600" },
   actionRow: { flexDirection: "row", gap: spacing.sm, marginTop: spacing.xs },
   actionButton: {
     flexDirection: "row",
@@ -403,6 +496,16 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
   },
   price: { fontSize: 20, fontWeight: "700", fontFamily: "Outfit_700Bold" },
+  priceRow: { flexDirection: "row", alignItems: "center", gap: spacing.sm },
+  priceEditRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
+  priceInput: {
+    flex: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.xs + 4,
+    fontSize: 14,
+  },
   scorePill: {
     flexDirection: "row",
     alignItems: "center",
