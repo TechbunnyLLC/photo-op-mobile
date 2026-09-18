@@ -178,7 +178,20 @@ export default function CaptureScreen() {
             detectLabels(MEDIA_BUCKET, `public/${mediaKey}`),
             detectText(MEDIA_BUCKET, `public/${mediaKey}`),
           ]);
-          await api.updateTags(media.id, [...labels, ...text], media._version);
+          // Rekognition's text detection frequently returns the same short
+          // string more than once (e.g. a stray "-" or a repeated word
+          // picked up as separate lines) — dedupe (case-insensitive,
+          // keeping the first casing seen) so arrayTags never gets
+          // literal duplicate entries, which broke tag-chip rendering
+          // (React needs unique keys) wherever the same tag repeats.
+          const seen = new Set<string>();
+          const dedupedTags = [...labels, ...text].filter((tag) => {
+            const key = tag.toLowerCase();
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+          await api.updateTags(media.id, dedupedTags, media._version);
         } catch (tagError) {
           console.warn("Tagging failed, media was still uploaded:", tagError);
         }

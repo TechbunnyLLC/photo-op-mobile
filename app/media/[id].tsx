@@ -420,8 +420,8 @@ export default function MediaDetailScreen() {
             <View style={styles.section}>
               <Text style={[styles.sectionLabel, { color: c.textMuted }]}>Categories</Text>
               <View style={styles.tagRow}>
-                {media.categories.map((cat) => (
-                  <View key={cat} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
+                {media.categories.map((cat, index) => (
+                  <View key={`${cat}-${index}`} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
                     <Text style={[styles.tagText, { color: c.textMuted }]}>{cat}</Text>
                   </View>
                 ))}
@@ -443,9 +443,9 @@ export default function MediaDetailScreen() {
               {editingTags ? (
                 <>
                   <View style={styles.tagRow}>
-                    {tagsDraft.map((tag) => (
+                    {tagsDraft.map((tag, index) => (
                       <Pressable
-                        key={tag}
+                        key={`${tag}-${index}`}
                         onPress={() => removeTagFromDraft(tag)}
                         style={[styles.tag, styles.removableTag, { backgroundColor: c.background, borderColor: c.border }]}
                       >
@@ -490,8 +490,8 @@ export default function MediaDetailScreen() {
                 </>
               ) : (
                 <View style={styles.tagRow}>
-                  {media.tags.map((tag) => (
-                    <View key={tag} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
+                  {media.tags.map((tag, index) => (
+                    <View key={`${tag}-${index}`} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
                       <Text style={[styles.tagText, { color: c.textMuted }]}>{tag}</Text>
                     </View>
                   ))}

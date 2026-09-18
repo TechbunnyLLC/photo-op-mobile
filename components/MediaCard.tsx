@@ -63,8 +63,8 @@ export function MediaCard({ item }: { item: MediaItem }) {
           ) : null}
           {item.tags.length > 0 ? (
             <View style={styles.tagRow}>
-              {item.tags.map((tag) => (
-                <View key={tag} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
+              {item.tags.map((tag, index) => (
+                <View key={`${tag}-${index}`} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
                   <Text style={[styles.tagText, { color: c.textMuted }]}>{tag}</Text>
                 </View>
               ))}
