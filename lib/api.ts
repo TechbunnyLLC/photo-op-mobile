@@ -45,26 +45,37 @@ function toMediaItem(m: BackendMedia): MediaItem {
   const ownerId = m.owner?.split("::")[0] || null;
   const isVideo = m.mediaType === "video";
 
-  // For photos, imageUrl (the raw upload at public/<imageKey>) is a real
-  // image and works fine as a thumbnail directly. For videos, imageUrl
-  // points at the raw .mp4 — not something <Image> can render — so the
-  // thumbnail instead has to be the poster frame the backend's
-  // PostCreateMedia Lambda extracts (see
-  // PostCreateMedia/src/services/video.js: extractFrameFromVideo +
-  // generateThumbnailImages), which lands at
-  // public/thumbnails/800/<imageKey without its extension>.jpg once
-  // processing finishes. isGeneratedThumbnails flips true when it's ready;
-  // until then thumbnailUrl is left empty and the UI shows a placeholder.
+  // imageUrl/imageKey point at the RAW upload the client sent, at
+  // public/<imageKey> — no watermark, no copyright logo, nothing burned
+  // in. The backend's PostCreateMedia Lambda (both the image and video
+  // branches — see amplify/backend/function/PostCreateMedia/src/index.js)
+  // composites the watermark + bottom-left "© photo-op.ai/@handle" logo
+  // and uploads that as a SEPARATE object at public/wmc/<imageKey>,
+  // leaving the raw original untouched. So the raw URL was never the
+  // watermarked version — the app just hadn't been pointed at the
+  // wmc/ copy yet. isGeneratedThumbnails flips true (via the same
+  // updateMediaStatus call, for both images and video) once that
+  // Lambda finishes, so it doubles as "the watermarked variant exists
+  // now" — use it as that signal and fall back to the raw upload only
+  // while processing is still in flight, right after posting.
+  const watermarkedUrl = `https://${MEDIA_BUCKET}.s3.amazonaws.com/public/wmc/${m.imageKey}`;
+  const displayUrl = m.isGeneratedThumbnails ? watermarkedUrl : (m.imageUrl ?? "");
+
+  // Videos additionally get a still poster frame extracted for feed/grid
+  // thumbnails (see PostCreateMedia/src/services/video.js), at
+  // public/thumbnails/800/<imageKey without its extension>.jpg. Photos
+  // don't need a separate thumbnail — the (now watermarked) image itself
+  // is already the right size to show directly.
   const thumbnailUrl = isVideo
     ? m.isGeneratedThumbnails
       ? `https://${MEDIA_BUCKET}.s3.amazonaws.com/public/thumbnails/800/${m.imageKey.replace(/\.[^./]+$/, "")}.jpg`
       : ""
-    : (m.imageUrl ?? "");
+    : displayUrl;
 
   return {
     id: m.id,
     mediaType: isVideo ? "video" : "photo",
-    url: m.imageUrl ?? "",
+    url: displayUrl,
     thumbnailUrl,
     title: m.title ?? undefined,
     caption: m.description,
