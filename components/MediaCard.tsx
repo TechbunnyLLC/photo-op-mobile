@@ -1,7 +1,14 @@
 import { useRouter } from "expo-router";
 import { Image as RNImage, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
+import { getMediaViralScore } from "../lib/media";
 import { resolveTheme, radius, spacing } from "../lib/theme";
 import type { MediaItem } from "../lib/types";
+
+// Above this score (0-100 heuristic — see lib/media.ts) a card is
+// considered "newsworthy" enough to badge in the feed. The Feed screen
+// already sorts by this same score, so trending items land at the top;
+// this badge just makes that visible on the card itself.
+const TRENDING_THRESHOLD = 65;
 
 // NOTE: swap for expo-image's <Image> for better caching/perf once that
 // dependency is added; react-native's Image works fine for this scaffold.
@@ -12,6 +19,7 @@ export function MediaCard({ item }: { item: MediaItem }) {
   const router = useRouter();
 
   const isVideo = item.mediaType === "video";
+  const isTrending = getMediaViralScore(item) >= TRENDING_THRESHOLD;
   const media = (
     <View>
       {item.thumbnailUrl ? (
@@ -26,6 +34,11 @@ export function MediaCard({ item }: { item: MediaItem }) {
       {isVideo ? (
         <View style={styles.playBadge}>
           <Text style={styles.playBadgeText}>▶</Text>
+        </View>
+      ) : null}
+      {isTrending ? (
+        <View style={[styles.trendingBadge, { backgroundColor: c.accent }]}>
+          <Text style={[styles.trendingBadgeText, { color: c.accentText }]}>Trending</Text>
         </View>
       ) : null}
     </View>
@@ -101,6 +114,19 @@ const styles = StyleSheet.create({
   playBadgeText: {
     color: "#fff",
     fontSize: 12,
+  },
+  trendingBadge: {
+    position: "absolute",
+    top: spacing.sm,
+    left: spacing.sm,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  trendingBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    fontFamily: "Outfit_600SemiBold",
   },
   body: {
     padding: spacing.md,

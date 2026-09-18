@@ -3,6 +3,7 @@ import { useCallback, useState } from "react";
 import { FlatList, RefreshControl, StyleSheet, Text, View, useColorScheme } from "react-native";
 import { MediaCard } from "../../components/MediaCard";
 import { api } from "../../lib/api";
+import { getMediaViralScore } from "../../lib/media";
 import { resolveTheme, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
 
@@ -18,7 +19,13 @@ export default function FeedScreen() {
   const load = useCallback(async () => {
     try {
       const feed = await api.getFeed();
-      setItems(feed);
+      // Newsworthy/trending first — same viral-score heuristic used on
+      // next-web (recency + views + likes + saves), so what's popular
+      // right now surfaces at the top instead of strict chronological.
+      const ranked = [...feed].sort(
+        (a, b) => getMediaViralScore(b) - getMediaViralScore(a)
+      );
+      setItems(ranked);
       setError(null);
     } catch (err: any) {
       // TEMP diagnostic logging — remove once real-backend feed works.
