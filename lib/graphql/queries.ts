@@ -34,16 +34,23 @@ export const mediaFields = /* GraphQL */ `
 `;
 
 // Public feed, newest first (uses the schema's listMediaSortByDate index).
+// $filter accepts a ModelMediaFilterInput — used for tag filtering
+// (api.getFeed's tag param builds { arrayTags: { contains: tag } },
+// which DynamoDB/AppSync resolves as "list contains this exact
+// element" for a List<String> field like arrayTags, not a substring
+// match — same operator next-web's own listMediaSortByDate call uses).
 export const listMediaSortByDate = /* GraphQL */ `
   query ListMediaSortByDate(
     $type: String!
     $sortDirection: ModelSortDirection
+    $filter: ModelMediaFilterInput
     $limit: Int
     $nextToken: String
   ) {
     listMediaSortByDate(
       type: $type
       sortDirection: $sortDirection
+      filter: $filter
       limit: $limit
       nextToken: $nextToken
     ) {

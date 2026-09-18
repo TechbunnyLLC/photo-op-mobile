@@ -122,12 +122,25 @@ export const api = {
     return items.map(toMediaItem);
   },
 
-  async getFeed(): Promise<MediaItem[]> {
-    if (USE_MOCK_API) return delay(MOCK_FEED);
+  // tag, when given, filters server-side to posts whose arrayTags list
+  // contains that exact tag (see queries.ts's listMediaSortByDate comment
+  // — DynamoDB's list-contains, not a substring match), so this reaches
+  // posts beyond whatever's in the current 30-item page, not just the
+  // ones already loaded on screen.
+  async getFeed(tag?: string): Promise<MediaItem[]> {
+    if (USE_MOCK_API) {
+      if (!tag) return delay(MOCK_FEED);
+      return delay(MOCK_FEED.filter((item) => item.tags.includes(tag)));
+    }
 
     const result = (await client.graphql({
       query: queries.listMediaSortByDate,
-      variables: { type: "Media", sortDirection: "DESC", limit: 30 },
+      variables: {
+        type: "Media",
+        sortDirection: "DESC",
+        limit: 30,
+        ...(tag ? { filter: { arrayTags: { contains: tag } } } : {}),
+      },
     })) as { data: { listMediaSortByDate: { items: BackendMedia[] } } };
     const items = result.data.listMediaSortByDate.items;
     return items.map(toMediaItem);
