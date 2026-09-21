@@ -23,8 +23,6 @@ const awsconfig = {
   aws_appsync_graphqlEndpoint:
     "https://os4rchf63javbpf6vhp47rj3ti.appsync-api.us-west-2.amazonaws.com/graphql",
   aws_appsync_region: "us-west-2",
-  // Schema's default auth is Cognito User Pools, which is how this app
-  // signs users in — no API key needed.
   aws_appsync_authenticationType: "AMAZON_COGNITO_USER_POOLS",
 
   // S3 (the "UserCreatedMedia" storage category)

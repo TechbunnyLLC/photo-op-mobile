@@ -16,6 +16,16 @@
         "EXPO_PUBLIC_USE_MOCK_API": "false"
       }
     },
+    "preview-simulator": {
+      "distribution": "internal",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_USE_MOCK_API": "false"
+      },
+      "ios": {
+        "simulator": true
+      }
+    },
     "production": {
       "autoIncrement": true,
       "channel": "production",

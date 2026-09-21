@@ -22,6 +22,7 @@ import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { useColorScheme } from "react-native";
 import { AuthProvider } from "../lib/auth-context";
+import { LicenseCartProvider } from "../lib/license-cart";
 import { getStripePublishableKey } from "../lib/payment";
 import { resolveTheme } from "../lib/theme";
 
@@ -63,20 +64,22 @@ export default function RootLayout() {
   return (
     <StripeProvider publishableKey={stripeKey} merchantIdentifier="merchant.ai.photoop.app">
       <AuthProvider>
-        <StatusBar style={scheme === "dark" ? "light" : "dark"} />
-        <Stack
-          screenOptions={{
-            headerStyle: { backgroundColor: c.surface },
-            headerTintColor: c.text,
-            contentStyle: { backgroundColor: c.background },
-          }}
-        >
-          <Stack.Screen name="index" options={{ headerShown: false }} />
-          <Stack.Screen name="(auth)" options={{ headerShown: false }} />
-          <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-          <Stack.Screen name="license-terms" options={{ title: "License Terms" }} />
-          <Stack.Screen name="interview" options={{ title: "Interview" }} />
-        </Stack>
+        <LicenseCartProvider>
+          <StatusBar style={scheme === "dark" ? "light" : "dark"} />
+          <Stack
+            screenOptions={{
+              headerStyle: { backgroundColor: c.surface },
+              headerTintColor: c.text,
+              contentStyle: { backgroundColor: c.background },
+            }}
+          >
+            <Stack.Screen name="index" options={{ headerShown: false }} />
+            <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+            <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+            <Stack.Screen name="license-terms" options={{ title: "License Terms" }} />
+            <Stack.Screen name="interview" options={{ title: "Interview" }} />
+          </Stack>
+        </LicenseCartProvider>
       </AuthProvider>
     </StripeProvider>
   );

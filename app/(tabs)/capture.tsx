@@ -65,6 +65,7 @@ export default function CaptureScreen() {
   // mounted. A price is optional — posting with a blank price is not for
   // sale; posting with a price records standard-terms consent.
   const [showLicenseModal, setShowLicenseModal] = useState(false);
+  const [termsReviewed, setTermsReviewed] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const [uploadPhase, setUploadPhase] = useState<"upload" | "process" | null>(null);
@@ -301,6 +302,7 @@ export default function CaptureScreen() {
       setTitle("");
       setCaption("");
       setPrice("");
+      setTermsReviewed(false);
       setMediaKind("photo");
       Alert.alert(
         "Posted!",
@@ -313,6 +315,7 @@ export default function CaptureScreen() {
               "while the backend generates the watermarked version.",
         [
           { text: "Keep shooting", style: "cancel" },
+          { text: "View post", onPress: () => router.push(`/media/${media.id}`) },
           { text: "View in feed", onPress: () => router.push("/(tabs)") },
         ]
       );
@@ -472,6 +475,14 @@ export default function CaptureScreen() {
             </Text>
             .
           </Text>
+          {termsReviewed ? (
+            <View style={styles.termsOkRow}>
+              <View style={[styles.checkbox, { backgroundColor: c.accent, borderColor: c.accent }]}>
+                <Text style={{ color: c.accentText, fontSize: 12, fontWeight: "700" }}>✓</Text>
+              </View>
+              <Text style={{ color: c.text, fontSize: 13, flex: 1 }}>Terms reviewed — OK to post</Text>
+            </View>
+          ) : null}
 
           {uploading ? (
             <View style={styles.uploadStatus}>
@@ -518,19 +529,33 @@ export default function CaptureScreen() {
       >
         <View style={[styles.licenseModal, { backgroundColor: c.background }]}>
           <View style={styles.licenseModalHeader}>
-            <Pressable onPress={() => setShowLicenseModal(false)} hitSlop={12}>
+            <Pressable
+              onPress={() => setShowLicenseModal(false)}
+              hitSlop={12}
+            >
               <Text style={{ color: c.secondary, fontWeight: "600", fontSize: 14 }}>Back</Text>
             </Pressable>
             <Text style={[styles.licenseModalTitle, { color: c.text }]}>License Terms</Text>
-            <View style={{ width: 40 }} />
+            <Pressable
+              onPress={() => {
+                setTermsReviewed(true);
+                setShowLicenseModal(false);
+              }}
+              hitSlop={12}
+            >
+              <Text style={{ color: c.secondary, fontWeight: "600", fontSize: 14 }}>OK</Text>
+            </Pressable>
           </View>
           <ScrollView contentContainerStyle={styles.licenseModalScroll}>
             <Text style={[styles.licenseModalText, { color: c.text }]}>{LICENSE_TERMS_TEXT}</Text>
             <Pressable
-              onPress={() => setShowLicenseModal(false)}
+              onPress={() => {
+                setTermsReviewed(true);
+                setShowLicenseModal(false);
+              }}
               style={[styles.licenseAgreeButton, { backgroundColor: c.accent }]}
             >
-              <Text style={[styles.buttonText, { color: c.accentText }]}>Done</Text>
+              <Text style={[styles.buttonText, { color: c.accentText }]}>OK</Text>
             </Pressable>
           </ScrollView>
         </View>
@@ -682,6 +707,11 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     alignItems: "center",
     justifyContent: "center",
+  },
+  termsOkRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.xs,
   },
   modeRow: {
     flexDirection: "row",

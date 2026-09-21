@@ -21,10 +21,14 @@ interface MediaPaymentSecret {
 }
 
 // Creates a Stripe PaymentIntent (and the backend's Payment/PaymentMedia
-// records) for buying one piece of media. Requires a signed-in session —
-// the payment service authenticates the request with the Cognito access
-// token, same as next-web's getMediaPaymentSecret.
-export async function getMediaPaymentSecret(mediaId: string): Promise<MediaPaymentSecret> {
+// records) for one or more media licenses. Same endpoint as next-web —
+// `items` is already an array. Requires a Cognito access token.
+export async function createLicensePaymentIntent(mediaIds: string[]): Promise<MediaPaymentSecret> {
+  const ids = [...new Set(mediaIds.filter(Boolean))];
+  if (ids.length === 0) {
+    throw new Error("Pick at least one asset to license.");
+  }
+
   const session = await fetchAuthSession();
   const jwt = session.tokens?.accessToken?.toString();
   if (!jwt) {
@@ -37,7 +41,9 @@ export async function getMediaPaymentSecret(mediaId: string): Promise<MediaPayme
       "Content-Type": "application/json",
       Authorization: `Bearer ${jwt}`,
     },
-    body: JSON.stringify({ items: [{ mediaId, quantity: 1 }] }),
+    body: JSON.stringify({
+      items: ids.map((mediaId) => ({ mediaId, quantity: 1 })),
+    }),
   });
 
   if (!response.ok) {
@@ -45,4 +51,8 @@ export async function getMediaPaymentSecret(mediaId: string): Promise<MediaPayme
   }
 
   return (await response.json()) as MediaPaymentSecret;
+}
+
+export async function getMediaPaymentSecret(mediaId: string): Promise<MediaPaymentSecret> {
+  return createLicensePaymentIntent([mediaId]);
 }

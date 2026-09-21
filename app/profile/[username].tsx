@@ -5,7 +5,6 @@ import {
   FlatList,
   Image,
   Pressable,
-  Share,
   StyleSheet,
   Text,
   View,
@@ -14,6 +13,7 @@ import {
 import { ProcessingProgressBar } from "../../components/ProcessingProgressBar";
 import { api } from "../../lib/api";
 import { getProfileImageUrl, getPublicProfileUrl } from "../../lib/media";
+import { shareLink } from "../../lib/share";
 import { radius, resolveTheme, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
 import { useMediaProgress } from "../../lib/useMediaProgress";
@@ -75,7 +75,7 @@ export default function PublicProfileScreen() {
     if (!profile) return;
     const url = getPublicProfileUrl(profile.username);
     try {
-      await Share.share({ message: `Check out @${profile.username} on Photo-OP: ${url}`, url });
+      await shareLink("Photo-OP", `Check out @${profile.username} on Photo-OP`, url);
     } catch {
       // best effort — no need to surface a share-sheet cancel as an error
     }

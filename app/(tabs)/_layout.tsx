@@ -43,6 +43,7 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen name="index" options={{ title: "Feed" }} />
+      <Tabs.Screen name="license" options={{ title: "License" }} />
       <Tabs.Screen name="capture" options={{ title: "Capture" }} />
       <Tabs.Screen name="profile" options={{ title: "Profile" }} />
     </Tabs>

@@ -1,6 +1,6 @@
 import * as ImagePicker from "expo-image-picker";
-import { useFocusEffect, useRouter } from "expo-router";
-import { useCallback, useState } from "react";
+import { useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
+import { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -66,6 +66,7 @@ export default function ProfileScreen() {
   const scheme = useColorScheme();
   const c = resolveTheme(scheme);
   const router = useRouter();
+  const { shelf: shelfParam } = useLocalSearchParams<{ shelf?: string }>();
   const {
     user,
     signOut,
@@ -78,9 +79,15 @@ export default function ProfileScreen() {
   } = useAuth();
 
   const [items, setItems] = useState<MediaItem[]>([]);
+  const [licenses, setLicenses] = useState<MediaItem[]>([]);
+  const [shelf, setShelf] = useState<"posted" | "licensed">("posted");
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (shelfParam === "licensed") setShelf("licensed");
+  }, [shelfParam]);
 
   const [editingUsername, setEditingUsername] = useState(false);
   const [usernameDraft, setUsernameDraft] = useState("");
@@ -89,8 +96,12 @@ export default function ProfileScreen() {
   const load = useCallback(async () => {
     if (!user) return;
     try {
-      const media = await api.getMyMedia(user.userId);
+      const [media, owned] = await Promise.all([
+        api.getMyMedia(user.userId),
+        api.listMyLicenses(user.userId),
+      ]);
       setItems(media);
+      setLicenses(owned);
       setError(null);
     } catch (err: any) {
       const message =
@@ -187,7 +198,7 @@ export default function ProfileScreen() {
     <FlatList
       style={{ backgroundColor: c.background }}
       contentContainerStyle={styles.list}
-      data={items}
+      data={shelf === "posted" ? items : licenses}
       keyExtractor={(item) => item.id}
       numColumns={NUM_COLUMNS}
       columnWrapperStyle={{ gap: COLUMN_GAP }}
@@ -276,8 +287,38 @@ export default function ProfileScreen() {
             ) : null}
           </View>
 
+          <View style={styles.shelfRow}>
+            <Pressable
+              onPress={() => setShelf("posted")}
+              style={[
+                styles.shelfChip,
+                { borderColor: c.border },
+                shelf === "posted"
+                  ? { backgroundColor: c.accent, borderColor: c.accent }
+                  : { backgroundColor: c.surface },
+              ]}
+            >
+              <Text style={{ color: shelf === "posted" ? c.accentText : c.text, fontWeight: "600", fontSize: 13 }}>
+                Posted{items.length ? ` (${items.length})` : ""}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setShelf("licensed")}
+              style={[
+                styles.shelfChip,
+                { borderColor: c.border },
+                shelf === "licensed"
+                  ? { backgroundColor: c.accent, borderColor: c.accent }
+                  : { backgroundColor: c.surface },
+              ]}
+            >
+              <Text style={{ color: shelf === "licensed" ? c.accentText : c.text, fontWeight: "600", fontSize: 13 }}>
+                Licensed{licenses.length ? ` (${licenses.length})` : ""}
+              </Text>
+            </Pressable>
+          </View>
           <Text style={[styles.sectionTitle, { color: c.text }]}>
-            My uploads{items.length > 0 ? ` (${items.length})` : ""}
+            {shelf === "posted" ? "My uploads" : "Licenses I bought"}
           </Text>
         </View>
       }
@@ -285,8 +326,10 @@ export default function ProfileScreen() {
         !loading ? (
           <Text style={[styles.note, { color: c.textMuted }]}>
             {error
-              ? `Couldn't load your uploads: ${error}`
-              : "You haven't posted anything yet — capture a moment to see it here."}
+              ? `Couldn't load your ${shelf === "posted" ? "uploads" : "licenses"}: ${error}`
+              : shelf === "licensed"
+                ? "Buy a license on a priced post to see it here."
+                : "You haven't posted anything yet — capture a moment to see it here."}
           </Text>
         ) : null
       }
@@ -366,6 +409,13 @@ const styles = StyleSheet.create({
   smallButton: { borderRadius: radius.md, paddingHorizontal: spacing.md, paddingVertical: spacing.xs + 2 },
   smallButtonOutline: { backgroundColor: "transparent", borderWidth: StyleSheet.hairlineWidth },
   sectionTitle: { fontSize: 15, fontWeight: "600", marginBottom: spacing.sm },
+  shelfRow: { flexDirection: "row", gap: spacing.sm, marginBottom: spacing.md },
+  shelfChip: {
+    borderRadius: radius.pill,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+  },
   note: { fontSize: 13, marginTop: spacing.md, textAlign: "center" },
   thumbWrap: {
     flex: 1 / 3,

@@ -1,6 +1,6 @@
 import { useRouter } from "expo-router";
 import { Image as RNImage, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
-import { getMediaViralScore, topTags } from "../lib/media";
+import { formatUsPrice, getMediaViralScore, topTags } from "../lib/media";
 import { useMediaProgress } from "../lib/useMediaProgress";
 import { ProcessingProgressBar } from "./ProcessingProgressBar";
 import { resolveTheme, radius, spacing } from "../lib/theme";
@@ -71,6 +71,11 @@ export function MediaCard({ item: itemProp }: { item: MediaItem }) {
       {isTrending ? (
         <View style={[styles.trendingBadge, { backgroundColor: c.accent }]}>
           <Text style={[styles.trendingBadgeText, { color: c.accentText }]}>Trending</Text>
+        </View>
+      ) : null}
+      {item.price ? (
+        <View style={[styles.priceBadge, { backgroundColor: "rgba(0,0,0,0.7)" }]}>
+          <Text style={styles.priceBadgeText}>{formatUsPrice(item.price)}</Text>
         </View>
       ) : null}
     </View>
@@ -162,6 +167,19 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "700",
     fontFamily: "Outfit_600SemiBold",
+  },
+  priceBadge: {
+    position: "absolute",
+    bottom: spacing.sm,
+    left: spacing.sm,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 4,
+  },
+  priceBadgeText: {
+    color: "#fff",
+    fontSize: 11,
+    fontWeight: "700",
   },
   body: {
     padding: spacing.md,

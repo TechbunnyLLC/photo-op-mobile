@@ -32,7 +32,10 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.photoop.app"
+      "bundleIdentifier": "ai.photoop.app",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -44,8 +47,6 @@
       "predictiveBackGestureEnabled": false,
       "package": "ai.photoop.app",
       "permissions": [
-        "android.permission.RECORD_AUDIO",
-        "android.permission.CAMERA",
         "android.permission.RECORD_AUDIO",
         "android.permission.CAMERA"
       ]

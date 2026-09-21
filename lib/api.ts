@@ -6,7 +6,7 @@ import * as queries from "./graphql/queries";
 import { MOCK_FEED } from "./mock-data";
 import type { MediaItem } from "./types";
 
-const client = generateClient();
+const client = generateClient({ authMode: "userPool" });
 
 function delay<T>(value: T, ms = 400): Promise<T> {
   return new Promise((resolve) => setTimeout(() => resolve(value), ms));
@@ -167,9 +167,10 @@ export const api = {
       return delay(item);
     }
 
+    const mediaId = Array.isArray(id) ? id[0] : id;
     const result = (await client.graphql({
       query: queries.getMedia,
-      variables: { id },
+      variables: { id: mediaId },
     })) as { data: { getMedia: BackendMedia | null } };
     if (!result.data.getMedia) throw new Error("Media not found");
     return toMediaItem(result.data.getMedia);
@@ -375,6 +376,24 @@ export const api = {
       variables: { cognitoId, mediaId: { eq: mediaId } },
     })) as { data: { getPaymentMediaByUser: { items: { mediaId: string; status: string | null }[] } } };
     return result.data.getPaymentMediaByUser.items.length > 0;
+  },
+
+  // Buyer library — every PaymentMedia row for this Cognito user, then
+  // hydrate each into a MediaItem. Omitting $mediaId queries the GSI by
+  // partition key only. Best-effort: a missing media record is skipped
+  // rather than failing the whole shelf.
+  async listMyLicenses(cognitoId: string): Promise<MediaItem[]> {
+    if (USE_MOCK_API) return [];
+    const result = (await client.graphql({
+      query: queries.getPaymentMediaByUser,
+      variables: { cognitoId },
+    })) as { data: { getPaymentMediaByUser: { items: { mediaId: string; status: string | null }[] } } };
+    const rows = result.data.getPaymentMediaByUser.items ?? [];
+    const ids = [...new Set(rows.map((row) => row.mediaId).filter(Boolean))];
+    const loaded = await Promise.all(
+      ids.map((id) => this.getMedia(id).catch(() => null))
+    );
+    return loaded.filter((item): item is MediaItem => !!item);
   },
 
   // The signed-in user's User-table record — holds the "system generated"

@@ -8,7 +8,6 @@ import {
   Image,
   Pressable,
   ScrollView,
-  Share,
   StyleSheet,
   Text,
   TextInput,
@@ -16,6 +15,7 @@ import {
   useColorScheme,
 } from "react-native";
 import { ProcessingProgressBar } from "../../components/ProcessingProgressBar";
+import { api } from "../../lib/api";
 import { MAX_TAGS } from "../../lib/config";
 import { useAuth } from "../../lib/auth-context";
 import {
@@ -28,7 +28,9 @@ import {
   topTags,
 } from "../../lib/media";
 import { LICENSE_TERMS_VERSION } from "../../lib/licenseTerms";
+import { useLicenseCart } from "../../lib/license-cart";
 import { getMediaPaymentSecret } from "../../lib/payment";
+import { shareLink } from "../../lib/share";
 import { radius, resolveTheme, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
 
@@ -44,6 +46,7 @@ export default function MediaDetailScreen() {
   const router = useRouter();
   const { user, username } = useAuth();
   const { initPaymentSheet, presentPaymentSheet } = useStripe();
+  const cart = useLicenseCart();
 
   const [media, setMedia] = useState<MediaItem | null>(null);
   const [loading, setLoading] = useState(true);
@@ -228,7 +231,7 @@ export default function MediaDetailScreen() {
     const url = getMediaPageUrl(media.id);
     const text = media.title || media.caption || "Check this out on Photo-OP";
     try {
-      await Share.share({ message: `${text} ${url}`, url });
+      await shareLink("Photo-OP", text, url);
     } catch (err) {
       Alert.alert("Couldn't share", err instanceof Error ? err.message : "Unknown error");
     }
@@ -602,6 +605,7 @@ export default function MediaDetailScreen() {
                 <Text style={[styles.ownedText, { color: c.textMuted }]}>✓ You own a license for this</Text>
               </View>
             ) : (
+              <>
               <Pressable
                 onPress={buyMedia}
                 disabled={buying}
@@ -611,6 +615,28 @@ export default function MediaDetailScreen() {
                   {buying ? "Processing…" : `Buy license — ${formatUsPrice(media.price)}`}
                 </Text>
               </Pressable>
+              <Pressable
+                onPress={() => {
+                  if (cart.has(media.id)) {
+                    cart.remove(media.id);
+                    return;
+                  }
+                  cart.add(media);
+                  Alert.alert(
+                    "Added to campaign",
+                    cart.campaignName.trim()
+                      ? `It’s in “${cart.campaignName.trim()}”. Checkout from the License tab.`
+                      : "Name the campaign on the License tab, then checkout.",
+                    [{ text: "Go to License", onPress: () => router.push("/(tabs)/license") }, { text: "OK" }]
+                  );
+                }}
+                style={[styles.addToCampaign, { borderColor: c.border, backgroundColor: c.surface }]}
+              >
+                <Text style={{ color: c.text, fontWeight: "600", fontSize: 14 }}>
+                  {cart.has(media.id) ? "Remove from campaign" : "Add to campaign"}
+                </Text>
+              </Pressable>
+              </>
             )
           ) : null}
 
@@ -913,6 +939,13 @@ const styles = StyleSheet.create({
     marginTop: spacing.sm,
     borderRadius: radius.md,
     paddingVertical: spacing.sm + 4,
+    alignItems: "center",
+  },
+  addToCampaign: {
+    marginTop: spacing.xs,
+    borderRadius: radius.md,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: spacing.sm + 2,
     alignItems: "center",
   },
   ownedPill: {

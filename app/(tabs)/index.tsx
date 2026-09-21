@@ -30,6 +30,7 @@ export default function FeedScreen() {
   // narrows the feed without also shrinking the chip bar down to just
   // that one tag (there'd be nothing left to tap back to).
   const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [forSaleOnly, setForSaleOnly] = useState(false);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   // useFocusEffect below intentionally only re-runs on actual focus
   // changes, not on every tag tap (selectTag already triggers its own
@@ -95,6 +96,7 @@ export default function FeedScreen() {
 
   const selectTag = useCallback(
     (tag: string | null) => {
+      setForSaleOnly(false);
       setSelectedTag(tag);
       setLoading(true);
       load(tag).finally(() => setLoading(false));
@@ -102,50 +104,79 @@ export default function FeedScreen() {
     [load]
   );
 
+  const shownItems = forSaleOnly ? items.filter((item) => !!item.price) : items;
+
   return (
     <View style={[styles.container, { backgroundColor: c.background }]}>
-      {availableTags.length > 0 ? (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.chipRow}
-          style={{ backgroundColor: c.background }}
+      <View style={[styles.chipBar, { backgroundColor: c.background }]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.chipRow}
+      >
+        <Pressable
+          onPress={() => {
+            setForSaleOnly(false);
+            selectTag(null);
+          }}
+          style={[
+            styles.chip,
+            { borderColor: c.border },
+            selectedTag === null && !forSaleOnly
+              ? { backgroundColor: c.accent, borderColor: c.accent }
+              : { backgroundColor: c.surface },
+          ]}
         >
-          <Pressable
-            onPress={() => selectTag(null)}
-            style={[
-              styles.chip,
-              { borderColor: c.border },
-              selectedTag === null ? { backgroundColor: c.accent, borderColor: c.accent } : { backgroundColor: c.surface },
-            ]}
+          <Text
+            style={{
+              color: selectedTag === null && !forSaleOnly ? c.accentText : c.text,
+              fontSize: 13,
+              fontWeight: "600",
+            }}
           >
-            <Text style={{ color: selectedTag === null ? c.accentText : c.text, fontSize: 13, fontWeight: "600" }}>
-              All
-            </Text>
-          </Pressable>
-          {availableTags.map((tag) => {
-            const active = tag === selectedTag;
-            return (
-              <Pressable
-                key={tag}
-                onPress={() => selectTag(active ? null : tag)}
-                style={[
-                  styles.chip,
-                  { borderColor: c.border },
-                  active ? { backgroundColor: c.accent, borderColor: c.accent } : { backgroundColor: c.surface },
-                ]}
-              >
-                <Text style={{ color: active ? c.accentText : c.text, fontSize: 13, fontWeight: "600" }}>
-                  {tag}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
-      ) : null}
+            All
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={() => {
+            setSelectedTag(null);
+            setForSaleOnly(true);
+            setLoading(true);
+            load(null).finally(() => setLoading(false));
+          }}
+          style={[
+            styles.chip,
+            { borderColor: c.border },
+            forSaleOnly ? { backgroundColor: c.accent, borderColor: c.accent } : { backgroundColor: c.surface },
+          ]}
+        >
+          <Text style={{ color: forSaleOnly ? c.accentText : c.text, fontSize: 13, fontWeight: "600" }}>
+            For sale
+          </Text>
+        </Pressable>
+        {availableTags.map((tag) => {
+          const active = tag === selectedTag;
+          return (
+            <Pressable
+              key={tag}
+              onPress={() => selectTag(active ? null : tag)}
+              style={[
+                styles.chip,
+                { borderColor: c.border },
+                active ? { backgroundColor: c.accent, borderColor: c.accent } : { backgroundColor: c.surface },
+              ]}
+            >
+              <Text style={{ color: active ? c.accentText : c.text, fontSize: 13, fontWeight: "600" }}>
+                {tag}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      </View>
 
       <FlatList
-        data={items}
+        data={shownItems}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => <MediaCard item={item} />}
@@ -155,9 +186,11 @@ export default function FeedScreen() {
             <Text style={[styles.empty, { color: c.textMuted }]}>
               {error
                 ? `Couldn't load the feed: ${error}`
-                : selectedTag
-                  ? `Nothing tagged "${selectedTag}" yet.`
-                  : "Nothing in the feed yet. Be the first to capture the moment."}
+                : forSaleOnly
+                  ? "Nothing listed for sale yet."
+                  : selectedTag
+                    ? `Nothing tagged "${selectedTag}" yet.`
+                    : "Nothing in the feed yet. Be the first to capture the moment."}
             </Text>
           ) : null
         }
@@ -170,11 +203,28 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   list: { padding: spacing.md },
   empty: { textAlign: "center", marginTop: spacing.xl, fontSize: 14 },
-  chipRow: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: spacing.xs },
+  // Pin height + row direction so Android doesn't paint the chips as a
+  // vertical stack for a frame after login (horizontal ScrollView's first
+  // measure can be column if height isn't bounded).
+  chipBar: {
+    height: 48,
+    flexGrow: 0,
+    flexShrink: 0,
+    overflow: "hidden",
+    justifyContent: "center",
+  },
+  chipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: spacing.md,
+    height: 48,
+  },
   chip: {
     borderRadius: radius.pill,
     borderWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: spacing.md,
     paddingVertical: spacing.xs + 2,
+    marginRight: spacing.xs,
+    flexShrink: 0,
   },
 });
