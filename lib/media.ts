@@ -3,9 +3,32 @@
 // viral-score heuristic, and the profile-picture URL convention. Kept in
 // sync by hand — this app doesn't share a package with next-web.
 
-import { MEDIA_BUCKET } from "./config";
+import { MAX_TAGS, MEDIA_BUCKET } from "./config";
 
-const WEB_DOMAIN = "photo-op.ai";
+export function topTags(tags: string[], limit = MAX_TAGS): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const raw of tags) {
+    const tag = raw.trim();
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(tag);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+// This app is wired to the **test** Amplify backend (see lib/config.ts).
+// next-web has a staging deployment (NEXT_PUBLIC_APP_ENV=stag) pointed at
+// that same test backend; photo-op.ai is next-web's PRODUCTION deployment,
+// pointed at a different (prod) backend -- a shared link built with that
+// domain 404s, since the media ID only exists in the test stack's
+// database. Swap this to "photo-op.ai" alongside lib/config.ts's
+// PAYMENT_SERVICE_URL/INTERVIEW_SERVICE_URL/DESCRIBE_MEDIA_URL if this app
+// ever points at production.
+const WEB_DOMAIN = "staging.photo-op.ai";
 
 // Last-resort fallback only — used while the real username is still
 // loading from the User table. See generateFallbackHandle for the

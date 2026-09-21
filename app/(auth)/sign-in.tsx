@@ -89,6 +89,12 @@ export default function SignInScreen() {
         </Text>
       </Pressable>
 
+      <Link href="/(auth)/forgot-password" asChild>
+        <Pressable style={styles.linkRow}>
+          <Text style={{ color: c.accent, fontWeight: "600" }}>Forgot password?</Text>
+        </Pressable>
+      </Link>
+
       <Link href="/(auth)/sign-up" asChild>
         <Pressable style={styles.linkRow}>
           <Text style={{ color: c.textMuted }}>

@@ -12,7 +12,7 @@ import {
 } from "react-native";
 import { MediaCard } from "../../components/MediaCard";
 import { api } from "../../lib/api";
-import { getMediaViralScore } from "../../lib/media";
+import { getMediaViralScore, topTags } from "../../lib/media";
 import { resolveTheme, radius, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
 
@@ -52,18 +52,16 @@ export default function FeedScreen() {
 
       if (!tag) {
         // Rebuild the chip bar from this unfiltered page — most frequent
-        // tags first, capped so the bar stays a single scrollable row
-        // instead of a wall of chips.
+        // tags first, capped at the same top-10 used on cards and posts.
         const counts = new Map<string, number>();
         for (const item of feed) {
           for (const t of item.tags) {
             counts.set(t, (counts.get(t) ?? 0) + 1);
           }
         }
-        const sorted = [...counts.entries()]
-          .sort((a, b) => b[1] - a[1])
-          .map(([t]) => t)
-          .slice(0, 20);
+        const sorted = topTags(
+          [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t)
+        );
         setAvailableTags(sorted);
       }
     } catch (err: any) {

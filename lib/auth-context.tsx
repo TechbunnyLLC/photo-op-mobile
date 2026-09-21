@@ -11,6 +11,8 @@ interface AuthContextValue {
   signUp: typeof auth.signUp;
   confirmSignUp: typeof auth.confirmSignUp;
   resendCode: typeof auth.resendCode;
+  forgotPassword: typeof auth.forgotPassword;
+  confirmForgotPassword: typeof auth.confirmForgotPassword;
   signIn: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
   // The user's customizable handle — starts out as the backend's
@@ -102,6 +104,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     signUp: auth.signUp,
     confirmSignUp: auth.confirmSignUp,
     resendCode: auth.resendCode,
+    forgotPassword: auth.forgotPassword,
+    confirmForgotPassword: auth.confirmForgotPassword,
     signIn: async (email, password) => {
       const signedInUser = await auth.signIn(email, password);
       setUser(signedInUser);

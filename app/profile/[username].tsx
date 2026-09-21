@@ -11,10 +11,12 @@ import {
   View,
   useColorScheme,
 } from "react-native";
+import { ProcessingProgressBar } from "../../components/ProcessingProgressBar";
 import { api } from "../../lib/api";
 import { getProfileImageUrl, getPublicProfileUrl } from "../../lib/media";
 import { radius, resolveTheme, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
+import { useMediaProgress } from "../../lib/useMediaProgress";
 
 const NUM_COLUMNS = 3;
 const COLUMN_GAP = spacing.xs;
@@ -146,30 +148,45 @@ export default function PublicProfileScreen() {
       ListEmptyComponent={
         <Text style={[styles.note, { color: c.textMuted }]}>Nothing posted yet.</Text>
       }
-      renderItem={({ item }) => {
-        const isVideo = item.mediaType === "video";
-        return (
-          <Pressable style={styles.thumbWrap} onPress={() => router.push(`/media/${item.id}`)}>
-            {item.thumbnailUrl ? (
-              <>
-                <Image source={{ uri: item.thumbnailUrl }} style={styles.thumb} />
-                {isVideo ? (
-                  <View style={styles.playBadge}>
-                    <Text style={styles.playBadgeText}>▶</Text>
-                  </View>
-                ) : null}
-              </>
-            ) : (
-              <View style={[styles.thumb, styles.thumbPlaceholder, { backgroundColor: c.surface }]}>
-                <Text style={{ color: c.textMuted, fontSize: 10, textAlign: "center" }}>
-                  {isVideo ? "Video processing…" : "Processing…"}
-                </Text>
-              </View>
-            )}
-          </Pressable>
-        );
-      }}
+      renderItem={({ item }) => (
+        <PublicProfileGridThumb item={item} onPress={() => router.push(`/media/${item.id}`)} />
+      )}
     />
+  );
+}
+
+// Pulled out of the FlatList's renderItem (rather than an inline function
+// body) so useMediaProgress -- and its polling/state -- has a real,
+// per-cell component instance to attach to, same as the owner-facing grid
+// in app/(tabs)/profile.tsx.
+function PublicProfileGridThumb({ item: itemProp, onPress }: { item: MediaItem; onPress: () => void }) {
+  const scheme = useColorScheme();
+  const c = resolveTheme(scheme);
+  const { progress, item } = useMediaProgress(itemProp);
+  const isVideo = item.mediaType === "video";
+
+  return (
+    <Pressable style={styles.thumbWrap} onPress={onPress}>
+      {item.thumbnailUrl ? (
+        <>
+          <Image source={{ uri: item.thumbnailUrl }} style={styles.thumb} />
+          {isVideo ? (
+            <View style={styles.playBadge}>
+              <Text style={styles.playBadgeText}>▶</Text>
+            </View>
+          ) : null}
+        </>
+      ) : (
+        <View style={[styles.thumb, styles.thumbPlaceholder, { backgroundColor: c.surface }]}>
+          <Text style={{ color: c.textMuted, fontSize: 10, textAlign: "center" }}>
+            {isVideo ? "Video processing…" : "Processing…"}
+          </Text>
+          <View style={styles.progressWrap}>
+            <ProcessingProgressBar progress={progress} />
+          </View>
+        </View>
+      )}
+    </Pressable>
   );
 }
 
@@ -214,6 +231,7 @@ const styles = StyleSheet.create({
   thumbWrap: { flex: 1 / 3, marginBottom: COLUMN_GAP },
   thumb: { width: "100%", aspectRatio: 1, borderRadius: radius.sm },
   thumbPlaceholder: { alignItems: "center", justifyContent: "center" },
+  progressWrap: { width: "70%", marginTop: 4 },
   playBadge: {
     position: "absolute",
     top: 4,

@@ -1,6 +1,8 @@
 import { useRouter } from "expo-router";
 import { Image as RNImage, Pressable, StyleSheet, Text, View, useColorScheme } from "react-native";
-import { getMediaViralScore } from "../lib/media";
+import { getMediaViralScore, topTags } from "../lib/media";
+import { useMediaProgress } from "../lib/useMediaProgress";
+import { ProcessingProgressBar } from "./ProcessingProgressBar";
 import { resolveTheme, radius, spacing } from "../lib/theme";
 import type { MediaItem } from "../lib/types";
 
@@ -13,22 +15,52 @@ const TRENDING_THRESHOLD = 65;
 // NOTE: swap for expo-image's <Image> for better caching/perf once that
 // dependency is added; react-native's Image works fine for this scaffold.
 
-export function MediaCard({ item }: { item: MediaItem }) {
+// Real photos/videos span a wide range of shapes -- portrait phone video
+// down around 9:16 (~0.56), landscape up around 16:9 (~1.78) -- and the
+// card used to force every single one into a fixed 4:5 portrait box with
+// resizeMode "cover" (RNImage's default), which badly cropped landscape
+// media (most of the frame got cut off to fill a tall narrow box). Sizing
+// each card to the media's own aspect ratio instead fixes that for any
+// orientation. These bounds are just a sanity clamp for the rare extreme
+// case (e.g. a panorama) so the feed's layout doesn't break -- they're
+// wide enough that no normal photo or video capture ever hits them.
+const MIN_CARD_RATIO = 0.55;
+const MAX_CARD_RATIO = 1.8;
+const DEFAULT_CARD_RATIO = 4 / 5;
+
+function cardAspectRatio(item: MediaItem): number {
+  if (!item.width || !item.height) return DEFAULT_CARD_RATIO;
+  const ratio = item.width / item.height;
+  return Math.min(Math.max(ratio, MIN_CARD_RATIO), MAX_CARD_RATIO);
+}
+
+export function MediaCard({ item: itemProp }: { item: MediaItem }) {
   const scheme = useColorScheme();
   const c = resolveTheme(scheme);
   const router = useRouter();
 
+  // While itemProp is still processing (video, no thumbnail yet), this
+  // polls for real progress and hands back a fresher item once the
+  // backend finishes -- so the card swaps in the real thumbnail on its
+  // own instead of being stuck showing "Processing…" until whatever list
+  // this card lives in happens to refetch.
+  const { progress, item } = useMediaProgress(itemProp);
+
   const isVideo = item.mediaType === "video";
   const isTrending = getMediaViralScore(item) >= TRENDING_THRESHOLD;
+  const imageStyle = [styles.image, { aspectRatio: cardAspectRatio(item) }];
   const media = (
     <View>
       {item.thumbnailUrl ? (
-        <RNImage source={{ uri: item.thumbnailUrl }} style={styles.image} />
+        <RNImage source={{ uri: item.thumbnailUrl }} style={imageStyle} />
       ) : (
-        <View style={[styles.image, styles.imagePlaceholder, { backgroundColor: c.background }]}>
+        <View style={[imageStyle, styles.imagePlaceholder, { backgroundColor: c.background }]}>
           <Text style={{ color: c.textMuted, fontSize: 13 }}>
             {isVideo ? "Video processing…" : "Processing…"}
           </Text>
+          <View style={styles.progressWrap}>
+            <ProcessingProgressBar progress={progress} />
+          </View>
         </View>
       )}
       {isVideo ? (
@@ -63,7 +95,7 @@ export function MediaCard({ item }: { item: MediaItem }) {
           ) : null}
           {item.tags.length > 0 ? (
             <View style={styles.tagRow}>
-              {item.tags.map((tag, index) => (
+              {topTags(item.tags).map((tag, index) => (
                 <View key={`${tag}-${index}`} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
                   <Text style={[styles.tagText, { color: c.textMuted }]}>{tag}</Text>
                 </View>
@@ -94,11 +126,14 @@ const styles = StyleSheet.create({
   },
   image: {
     width: "100%",
-    aspectRatio: 4 / 5,
   },
   imagePlaceholder: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  progressWrap: {
+    width: "60%",
+    marginTop: 4,
   },
   playBadge: {
     position: "absolute",

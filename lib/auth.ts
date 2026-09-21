@@ -1,7 +1,9 @@
 import {
+  confirmResetPassword as amplifyConfirmResetPassword,
   confirmSignUp as amplifyConfirmSignUp,
   getCurrentUser as amplifyGetCurrentUser,
   resendSignUpCode as amplifyResendSignUpCode,
+  resetPassword as amplifyResetPassword,
   signIn as amplifySignIn,
   signOut as amplifySignOut,
   signUp as amplifySignUp,
@@ -70,6 +72,44 @@ export async function resendCode(email: string): Promise<void> {
     return;
   }
   await amplifyResendSignUpCode({ username: email });
+}
+
+// Password reset -- "forgot password" on the sign-in screen. Cognito's
+// flow is two calls: resetPassword sends the code, confirmResetPassword
+// takes that code plus the new password. Same MOCK_CODE convention as
+// sign-up confirmation in mock mode (see ConfirmScreen's "Mock mode -- the
+// code is 123456" note) -- reuses the same account.code field since a
+// mock account is never mid-sign-up-confirmation and mid-password-reset
+// at once.
+export async function forgotPassword(email: string): Promise<void> {
+  if (USE_MOCK_API) {
+    const account = mockAccounts.get(email);
+    if (!account) throw new Error("No account found for that email.");
+    account.code = MOCK_CODE;
+    await mockDelay(undefined);
+    return;
+  }
+  await amplifyResetPassword({ username: email });
+}
+
+export async function confirmForgotPassword(
+  email: string,
+  code: string,
+  newPassword: string
+): Promise<void> {
+  if (USE_MOCK_API) {
+    const account = mockAccounts.get(email);
+    if (!account) throw new Error("No account found for that email.");
+    if (code !== account.code) throw new Error("Incorrect code -- try 123456 in mock mode.");
+    account.password = newPassword;
+    await mockDelay(undefined);
+    return;
+  }
+  await amplifyConfirmResetPassword({
+    username: email,
+    confirmationCode: code,
+    newPassword,
+  });
 }
 
 export async function signIn(email: string, password: string): Promise<AuthUser> {

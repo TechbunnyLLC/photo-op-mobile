@@ -1,32 +1,71 @@
-import { getUrl, uploadData } from "aws-amplify/storage";
-import { File } from "expo-file-system";
+import { getUrl } from "aws-amplify/storage";
+import { File, Paths, UploadType } from "expo-file-system";
+import { USE_MOCK_API } from "./config";
 
 // The backend's PostCreateMedia/SyncMedia Lambdas key off objects under the
-// "public/" prefix of the UserCreatedMedia bucket (see
-// amplify/backend/function/PostCreateMedia/src/index.js in the backend
-// repo — it reads `public/${imageKey}` and writes back to
-// `public/wmc/${imageKey}` and `public/copyright/${imageKey}`).
-export async function uploadMediaFile(localUri: string, key: string, contentType: string) {
-  // fetch(localUri).blob() is NOT reliable for local file:// (and
-  // especially Android content://) URIs in React Native/Expo Go — in
-  // testing it silently "succeeded" while actually uploading the literal
-  // 14-byte text "File not found" instead of the photo, with no thrown
-  // error anywhere in the chain. expo-file-system's File.bytes() reads
-  // the local file directly through Expo's native module instead of the
-  // flaky global fetch/Blob shim.
-  const file = new File(localUri);
-  const bytes = await file.bytes();
+// "public/" prefix of the UserCreatedMedia bucket.
 
-  await uploadData({
+export type UploadProgress = (fraction: number) => void;
+
+/**
+ * Stream a local camera/library file to S3. Do not use File.bytes() or
+ * Amplify uploadData here — both load the whole clip into JS RAM and freeze
+ * Capture on Android (especially after a video + a price/licensing prompt).
+ */
+export async function uploadMediaFile(
+  localUri: string,
+  key: string,
+  contentType: string,
+  onProgress?: UploadProgress,
+) {
+  if (USE_MOCK_API) {
+    onProgress?.(1);
+    return key;
+  }
+
+  const file = fileForUpload(localUri, key);
+  const { url } = await getUrl({
     path: `public/${key}`,
-    data: bytes,
-    options: { contentType },
-  }).result;
+    options: {
+      method: "PUT",
+      contentType,
+      expiresIn: 3600,
+    },
+  });
 
+  const result = await file.upload(url.toString(), {
+    httpMethod: "PUT",
+    uploadType: UploadType.BINARY_CONTENT,
+    mimeType: contentType,
+    headers: { "Content-Type": contentType },
+    onProgress: ({ bytesSent, totalBytes }) => {
+      if (totalBytes > 0) onProgress?.(bytesSent / totalBytes);
+    },
+  });
+
+  if (result.status < 200 || result.status >= 300) {
+    throw new Error(
+      `S3 upload failed (${result.status}): ${result.body?.slice(0, 300) || "no body"}`,
+    );
+  }
+
+  onProgress?.(1);
   return key;
 }
 
 export async function getMediaUrl(key: string, variant: "" | "wmc/" | "copyright/" = "wmc/") {
   const { url } = await getUrl({ path: `public/${variant}${key}` });
   return url.toString();
+}
+
+function fileForUpload(localUri: string, key: string): File {
+  if (localUri.startsWith("file://") || localUri.startsWith("content://")) {
+    return new File(localUri);
+  }
+
+  const src = new File(localUri);
+  const dest = new File(Paths.cache, key.replace(/\//g, "_"));
+  if (dest.exists) dest.delete();
+  src.copy(dest);
+  return dest;
 }

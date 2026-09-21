@@ -1,5 +1,6 @@
 import { generateClient } from "aws-amplify/api";
 import { MEDIA_BUCKET, USE_MOCK_API } from "./config";
+import { topTags } from "./media";
 import * as mutations from "./graphql/mutations";
 import * as queries from "./graphql/queries";
 import { MOCK_FEED } from "./mock-data";
@@ -23,6 +24,9 @@ interface BackendMedia {
   arrayTags: string[];
   categories: (string | null)[] | null;
   isGeneratedThumbnails: boolean | null;
+  processingProgress: number | null;
+  width: number | null;
+  height: number | null;
   _version: number | null;
   owner: string | null;
   city: string | null;
@@ -35,6 +39,9 @@ interface BackendMedia {
   saveCount: number | null;
   viewCount: number | null;
   copyrightText: string | null;
+  licenseConsentGiven: boolean | null;
+  licenseConsentAt: string | null;
+  licenseTermsVersion: string | null;
 }
 
 function toMediaItem(m: BackendMedia): MediaItem {
@@ -80,7 +87,8 @@ function toMediaItem(m: BackendMedia): MediaItem {
     title: m.title ?? undefined,
     caption: m.description,
     _version: m._version ?? undefined,
-    tags: m.arrayTags ?? [],
+    tags: topTags(m.arrayTags ?? []),
+    processingProgress: m.processingProgress ?? undefined,
     categories: (m.categories ?? []).filter((c): c is string => !!c),
     uploader: {
       id: ownerId ?? "unknown",
@@ -92,11 +100,16 @@ function toMediaItem(m: BackendMedia): MediaItem {
     location: m.city ? { label: m.city, lat: m.lat ?? 0, lng: m.long ?? 0 } : undefined,
     createdAt: m.createdAt ?? new Date().toISOString(),
     capturedTime: m.capturedTime ?? undefined,
+    width: m.width ?? undefined,
+    height: m.height ?? undefined,
     price: m.price ?? undefined,
     likeCount: m.likeCount ?? 0,
     saveCount: m.saveCount ?? 0,
     viewCount: m.viewCount ?? 0,
     copyrightText: m.copyrightText ?? undefined,
+    licenseConsentGiven: m.licenseConsentGiven ?? undefined,
+    licenseConsentAt: m.licenseConsentAt ?? undefined,
+    licenseTermsVersion: m.licenseTermsVersion ?? undefined,
   };
 }
 
@@ -170,6 +183,9 @@ export const api = {
     imageUrl: string;
     mediaType: "image" | "video";
     description: string;
+    // Optional title, collected on the capture/review screen. Editable
+    // afterward too -- see updateMediaTitle.
+    title?: string;
     lat?: number;
     long?: number;
     city?: string;
@@ -180,6 +196,13 @@ export const api = {
     // backend (Media.price); this just lets the uploader set it at post
     // time. Omitted/undefined means not for sale, same as $0.
     price?: number;
+    // Set together, once, the first time a price is set (see
+    // lib/licenseTerms.ts and the consent checkbox in capture.tsx) — the
+    // uploader's agreement to license this item under Photo-OP's
+    // standard terms, and which version of those terms they agreed to.
+    licenseConsentGiven?: boolean;
+    licenseConsentAt?: string;
+    licenseTermsVersion?: string;
   }): Promise<MediaItem> {
     if (USE_MOCK_API) {
       const item: MediaItem = {
@@ -188,6 +211,7 @@ export const api = {
         url: input.imageUrl,
         thumbnailUrl: input.imageUrl,
         caption: input.description,
+        title: input.title,
         tags: [],
         categories: [],
         uploader: { id: "me", displayName: "you" },
@@ -197,6 +221,9 @@ export const api = {
         likeCount: 0,
         saveCount: 0,
         viewCount: 0,
+        licenseConsentGiven: input.licenseConsentGiven,
+        licenseConsentAt: input.licenseConsentAt,
+        licenseTermsVersion: input.licenseTermsVersion,
       };
       return delay(item, 800);
     }
@@ -269,15 +296,49 @@ export const api = {
     });
   },
 
+  // Saves a custom title -- mirrors updateMediaCopyright's pattern. See
+  // lib/graphql/mutations.ts's updateMediaTitle comment for why this
+  // exists (capture.tsx never collects one up front).
+  async updateMediaTitle(mediaId: string, title: string, version?: number): Promise<void> {
+    if (USE_MOCK_API) return;
+    await client.graphql({
+      query: mutations.updateMediaTitle,
+      variables: { input: { id: mediaId, title, _version: version } },
+    });
+  },
+
   // Saves the uploader's asking price after the fact — mirrors
   // updateMediaCopyright's pattern. Pricing itself already exists on the
   // backend; capture.tsx sets it at post time and this covers changing it
   // later from the media detail screen.
-  async updateMediaPrice(mediaId: string, price: number, version?: number): Promise<void> {
+  // consent, when passed, is stamped in the SAME mutation call/version
+  // bump as the price change — see lib/licenseTerms.ts. Only pass it the
+  // first time a post gets a price (media/[id].tsx and capture.tsx both
+  // check media.licenseConsentGiven / a fresh post's lack of one before
+  // asking for it again).
+  async updateMediaPrice(
+    mediaId: string,
+    price: number,
+    version?: number,
+    consent?: { licenseTermsVersion: string }
+  ): Promise<void> {
     if (USE_MOCK_API) return;
     await client.graphql({
       query: mutations.updateMediaPrice,
-      variables: { input: { id: mediaId, price, _version: version } },
+      variables: {
+        input: {
+          id: mediaId,
+          price,
+          _version: version,
+          ...(consent
+            ? {
+                licenseConsentGiven: true,
+                licenseConsentAt: new Date().toISOString(),
+                licenseTermsVersion: consent.licenseTermsVersion,
+              }
+            : {}),
+        },
+      },
     });
   },
 

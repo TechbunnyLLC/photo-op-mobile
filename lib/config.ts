@@ -37,6 +37,9 @@ export const USE_MOCK_API = process.env.EXPO_PUBLIC_USE_MOCK_API !== "false";
 // app/(tabs)/capture.tsx.
 export const ENABLE_CLIENT_TAGGING = true;
 
+// Hard cap for auto-tags, feed chips, cards, and the post editor.
+export const MAX_TAGS = 10;
+
 // Media licensing purchases go through a SEPARATE payment microservice —
 // not the Amplify GraphQL API — the same one next-web's own checkout flow
 // (src/components/providers/PaymentProvider.tsx) already calls: /config
@@ -51,3 +54,22 @@ export const ENABLE_CLIENT_TAGGING = true;
 export const PAYMENT_SERVICE_URL =
   "https://ess4ko3qg4.execute-api.us-west-2.amazonaws.com/test/payment";
 
+
+// AI-interview microservice (InterviewAI Lambda, backend repo
+// amplify/backend/function/InterviewAI) — /start begins a short,
+// AI-driven Q&A about what the uploader just captured; /continue submits
+// each answer and gets the next question (or {done:true}) back. Cognito
+// JWT auth'd, same pattern as PAYMENT_SERVICE_URL above. Runs on
+// Anthropic's Claude API directly (not AWS Bedrock) — see lib/interview.ts.
+//
+// This is the **test** stack's URL — swap alongside PAYMENT_SERVICE_URL
+// if this app ever points at production.
+export const INTERVIEW_SERVICE_URL =
+  "https://do3dr0jr81.execute-api.us-west-2.amazonaws.com/test/interview";
+
+// Same backend Lambda/API as INTERVIEW_SERVICE_URL above (InterviewAI) --
+// the API Gateway resource behind it is a {proxy+} catch-all, so this is
+// just a different path on the same deployment, not a separate service.
+// Generates a suggested caption from a photo (see lib/media-description.ts).
+export const DESCRIBE_MEDIA_URL =
+  "https://do3dr0jr81.execute-api.us-west-2.amazonaws.com/test/describe";

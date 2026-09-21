@@ -15,6 +15,7 @@ export const mediaFields = /* GraphQL */ `
   mediaType
   status
   isGeneratedThumbnails
+  processingProgress
   _version
   owner
   createdAt
@@ -31,6 +32,9 @@ export const mediaFields = /* GraphQL */ `
   height
   categories
   copyrightText
+  licenseConsentGiven
+  licenseConsentAt
+  licenseTermsVersion
 `;
 
 // Public feed, newest first (uses the schema's listMediaSortByDate index).

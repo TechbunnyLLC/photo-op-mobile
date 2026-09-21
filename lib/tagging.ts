@@ -130,7 +130,7 @@ async function callRekognition(target: string, body: unknown): Promise<any> {
 export async function detectLabels(s3Bucket: string, s3Key: string): Promise<string[]> {
   const result = await callRekognition("RekognitionService.DetectLabels", {
     Image: { S3Object: { Bucket: s3Bucket, Name: s3Key } },
-    MaxLabels: 20,
+    MaxLabels: 10,
     MinConfidence: 70,
   });
 

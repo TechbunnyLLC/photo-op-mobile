@@ -8,3 +8,8 @@ web-build/
 ios/
 android/
 .claude/
+
+# Local debugging artifacts (APK test builds, stray tool downloads)
+*.apk
+platform-tools.zip
+platform-tools/

@@ -57,6 +57,19 @@ export const updateMediaCopyright = /* GraphQL */ `
   }
 `;
 
+// Lets the uploader set/rename the title after the fact -- capture.tsx
+// never collects one at post time (see MediaDetailScreen's "Untitled"
+// fallback), so this is the only way a post gets a title today.
+export const updateMediaTitle = /* GraphQL */ `
+  mutation UpdateMediaTitle($input: UpdateMediaInput!) {
+    updateMedia(input: $input) {
+      id
+      title
+      _version
+    }
+  }
+`;
+
 export const likeMedia = /* GraphQL */ `
   mutation LikeMedia($mediaId: ID!) {
     likeMedia(mediaId: $mediaId) {
@@ -133,11 +146,17 @@ export const deleteMedia = /* GraphQL */ `
 // pricing itself is already fully implemented on the backend (Media.price
 // on the schema); this was just missing a client mutation. Mirrors
 // updateMediaCopyright's pattern.
+// Also carries the license-consent fields (see lib/licenseTerms.ts) so a
+// price change and the one-time consent capture can happen in the same
+// mutation call/AUTOMERGE version bump, rather than two round-trips.
 export const updateMediaPrice = /* GraphQL */ `
   mutation UpdateMediaPrice($input: UpdateMediaInput!) {
     updateMedia(input: $input) {
       id
       price
+      licenseConsentGiven
+      licenseConsentAt
+      licenseTermsVersion
       _version
     }
   }

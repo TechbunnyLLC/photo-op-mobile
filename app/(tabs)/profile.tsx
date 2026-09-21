@@ -14,14 +14,53 @@ import {
   View,
   useColorScheme,
 } from "react-native";
+import { ProcessingProgressBar } from "../../components/ProcessingProgressBar";
 import { useAuth } from "../../lib/auth-context";
 import { api } from "../../lib/api";
 import { getDisplayHandle } from "../../lib/media";
 import { radius, resolveTheme, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
+import { useMediaProgress } from "../../lib/useMediaProgress";
 
 const COLUMN_GAP = spacing.xs;
 const NUM_COLUMNS = 3;
+
+// Pulled out of the FlatList's renderItem (rather than an inline function
+// body) so useMediaProgress -- and its polling/state -- has a real,
+// per-cell component instance to attach to, same reasoning as any other
+// hook used per list item.
+function ProfileGridThumb({ item: itemProp, onPress }: { item: MediaItem; onPress: () => void }) {
+  const scheme = useColorScheme();
+  const c = resolveTheme(scheme);
+  const { progress, item } = useMediaProgress(itemProp);
+  const isVideo = item.mediaType === "video";
+
+  const inner = item.thumbnailUrl ? (
+    <>
+      <Image source={{ uri: item.thumbnailUrl }} style={styles.thumb} />
+      {isVideo ? (
+        <View style={styles.playBadge}>
+          <Text style={styles.playBadgeText}>▶</Text>
+        </View>
+      ) : null}
+    </>
+  ) : (
+    <View style={[styles.thumb, styles.thumbPlaceholder, { backgroundColor: c.surface }]}>
+      <Text style={{ color: c.textMuted, fontSize: 10, textAlign: "center" }}>
+        {isVideo ? "Video processing…" : "Processing…"}
+      </Text>
+      <View style={styles.progressWrap}>
+        <ProcessingProgressBar progress={progress} />
+      </View>
+    </View>
+  );
+
+  return (
+    <Pressable style={styles.thumbWrap} onPress={onPress}>
+      {inner}
+    </Pressable>
+  );
+}
 
 export default function ProfileScreen() {
   const scheme = useColorScheme();
@@ -251,35 +290,14 @@ export default function ProfileScreen() {
           </Text>
         ) : null
       }
-      renderItem={({ item }) => {
-        const isVideo = item.mediaType === "video";
+      renderItem={({ item }) => (
         // thumbWrap carries all the grid-cell sizing (it's the direct row
         // child FlatList's columnWrapperStyle lays out) — everything inside
         // it just fills that fixed-size box, no flex of its own. Tapping
         // any cell opens the same media detail screen the Feed uses
         // (app/media/[id].tsx) — likes, price, location, credit, delete, etc.
-        const inner = item.thumbnailUrl ? (
-          <>
-            <Image source={{ uri: item.thumbnailUrl }} style={styles.thumb} />
-            {isVideo ? (
-              <View style={styles.playBadge}>
-                <Text style={styles.playBadgeText}>▶</Text>
-              </View>
-            ) : null}
-          </>
-        ) : (
-          <View style={[styles.thumb, styles.thumbPlaceholder, { backgroundColor: c.surface }]}>
-            <Text style={{ color: c.textMuted, fontSize: 10, textAlign: "center" }}>
-              {isVideo ? "Video processing…" : "Processing…"}
-            </Text>
-          </View>
-        );
-        return (
-          <Pressable style={styles.thumbWrap} onPress={() => router.push(`/media/${item.id}`)}>
-            {inner}
-          </Pressable>
-        );
-      }}
+        <ProfileGridThumb item={item} onPress={() => router.push(`/media/${item.id}`)} />
+      )}
       ListFooterComponent={
         <Pressable
           onPress={handleSignOut}
@@ -361,6 +379,10 @@ const styles = StyleSheet.create({
   thumbPlaceholder: {
     alignItems: "center",
     justifyContent: "center",
+  },
+  progressWrap: {
+    width: "70%",
+    marginTop: 4,
   },
   playBadge: {
     position: "absolute",

@@ -1,0 +1,50 @@
+diff --git a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+index 999a22c..ed9a833 100644
+--- a/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
++++ b/node_modules/expo-camera/android/src/main/java/expo/modules/camera/ExpoCameraView.kt
+@@ -118,16 +118,29 @@ class ExpoCameraView(
+ 
+         imageAnalysisUseCase?.targetRotation = rotation
+         imageCaptureUseCase?.targetRotation = rotation
++        val videoRotation = when (rotation) {
++          Surface.ROTATION_90 -> Surface.ROTATION_270
++          Surface.ROTATION_270 -> Surface.ROTATION_90
++          else -> rotation
++        }
++        videoCaptureUseCase?.targetRotation = videoRotation
++        currentRotation = videoRotation
+       }
+     }
+   }
+ 
++  // Last (video-specific) rotation computed by the listener above.
++  // Re-applied explicitly at the start of record() -- see the comment
++  // there.
++  private var currentRotation: Int = Surface.ROTATION_0
++
+   var camera: Camera? = null
+   private var activeRecording: Recording? = null
+ 
+   private var cameraProvider: ProcessCameraProvider? = null
+   private var imageCaptureUseCase: ImageCapture? = null
+   private var imageAnalysisUseCase: ImageAnalysis? = null
++  private var videoCaptureUseCase: VideoCapture<Recorder>? = null
+   private var recorder: Recorder? = null
+   private var barcodeFormats: List<BarcodeType> = emptyList()
+   private var glSurfaceTexture: SurfaceTexture? = null
+@@ -353,6 +366,7 @@ class ExpoCameraView(
+   }
+ 
+   fun record(options: RecordingOptions, promise: Promise, cacheDirectory: File) {
++    videoCaptureUseCase?.targetRotation = currentRotation
+     val file = FileSystemUtils.generateOutputFile(cacheDirectory, "Camera", ".mp4")
+     val fileOutputOptions = FileOutputOptions.Builder(file)
+       .setFileSizeLimit(options.maxFileSize.toLong())
+@@ -514,6 +528,7 @@ class ExpoCameraView(
+     imageCaptureUseCase = imageCaptureBuilder.build()
+ 
+     val videoCapture = createVideoCapture()
++    videoCaptureUseCase = videoCapture
+     imageAnalysisUseCase = createImageAnalyzer()
+ 
+     val useCases = UseCaseGroup.Builder().apply {

@@ -1,5 +1,5 @@
 import { useStripe } from "@stripe/stripe-react-native";
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Link, Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { useCallback, useEffect, useState } from "react";
 import {
@@ -15,7 +15,8 @@ import {
   View,
   useColorScheme,
 } from "react-native";
-import { api } from "../../lib/api";
+import { ProcessingProgressBar } from "../../components/ProcessingProgressBar";
+import { MAX_TAGS } from "../../lib/config";
 import { useAuth } from "../../lib/auth-context";
 import {
   formatCoordinates,
@@ -24,7 +25,9 @@ import {
   getDisplayHandle,
   getMediaPageUrl,
   getMediaViralScore,
+  topTags,
 } from "../../lib/media";
+import { LICENSE_TERMS_VERSION } from "../../lib/licenseTerms";
 import { getMediaPaymentSecret } from "../../lib/payment";
 import { radius, resolveTheme, spacing } from "../../lib/theme";
 import type { MediaItem } from "../../lib/types";
@@ -64,6 +67,10 @@ export default function MediaDetailScreen() {
   const [savingCredit, setSavingCredit] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [savingTitle, setSavingTitle] = useState(false);
+
   const [editingPrice, setEditingPrice] = useState(false);
   const [priceDraft, setPriceDraft] = useState("");
   const [savingPrice, setSavingPrice] = useState(false);
@@ -84,10 +91,52 @@ export default function MediaDetailScreen() {
   const [uploaderProfile, setUploaderProfile] = useState<{ username: string | null; profileImageKey: string | null } | null>(null);
 
   const isVideo = media?.mediaType === "video";
-  const videoPlayer = useVideoPlayer(isVideo ? media?.url ?? null : null, (player) => {
+  // Mirrors components/MediaCard.tsx's convention: thumbnailUrl only gets
+  // set (see lib/api.ts's toMediaItem) once PostCreateMedia finishes, so
+  // this is the same "still mid-encode" signal used there.
+  const videoStillProcessing = isVideo && !media?.thumbnailUrl;
+  const videoPlayer = useVideoPlayer(isVideo && !videoStillProcessing ? media?.url ?? null : null, (player) => {
     player.loop = true;
     player.play();
   });
+
+  // Polls for real encode progress while the video is still processing,
+  // and refreshes `media` once the backend finishes so the player swaps
+  // in automatically instead of staying on the placeholder until the
+  // user manually reopens the screen. See lib/useMediaProgress.ts for
+  // the same logic used by feed/profile grid cards -- duplicated in a
+  // plain effect here (rather than reusing that hook directly) because
+  // this screen already owns `media` as its own state rather than
+  // receiving a MediaItem as a prop.
+  const [processingProgress, setProcessingProgress] = useState<number | null>(null);
+  useEffect(() => {
+    if (!videoStillProcessing || !media) return;
+    let cancelled = false;
+    const mediaId = media.id;
+
+    const poll = async () => {
+      try {
+        const fresh = await api.getMedia(mediaId);
+        if (cancelled) return;
+        setProcessingProgress(fresh.processingProgress ?? null);
+        if (fresh.thumbnailUrl) {
+          // Finished -- adopt the fresh item (real url, dimensions, etc.)
+          // so the video player picks it up on the next render.
+          setMedia(fresh);
+        }
+      } catch {
+        // Best-effort -- try again next tick.
+      }
+    };
+
+    poll();
+    const interval = setInterval(poll, 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [videoStillProcessing, media?.id]);
 
   useEffect(() => {
     if (!id) return;
@@ -116,7 +165,7 @@ export default function MediaDetailScreen() {
                 if (!cancelled) setPurchased(owned);
               })
               .catch(() => {
-                // best effort — Buy button just stays visible if this fails
+                if (!cancelled) setPurchased(false);
               });
           }
         }
@@ -185,7 +234,10 @@ export default function MediaDetailScreen() {
     }
   }, [media]);
 
-  const isOwner = !!user && !!media && media.uploader.id === user.userId;
+  const isOwner =
+    !!user &&
+    !!media &&
+    (media.uploader.id === user.userId || media.uploader.id.startsWith(`${user.userId}`));
 
   // Licensing purchase — gets a PaymentIntent clientSecret from the
   // Payment microservice (lib/payment.ts), hands it to Stripe's native
@@ -254,6 +306,27 @@ export default function MediaDetailScreen() {
     }
   }, [media, creditDraft]);
 
+  const startEditingTitle = useCallback(() => {
+    if (!media) return;
+    setTitleDraft(media.title || "");
+    setEditingTitle(true);
+  }, [media]);
+
+  const saveTitle = useCallback(async () => {
+    if (!media) return;
+    const trimmed = titleDraft.trim();
+    setSavingTitle(true);
+    try {
+      await api.updateMediaTitle(media.id, trimmed, media._version);
+      setMedia({ ...media, title: trimmed || undefined });
+      setEditingTitle(false);
+    } catch (err) {
+      Alert.alert("Couldn't save title", err instanceof Error ? err.message : "Unknown error");
+    } finally {
+      setSavingTitle(false);
+    }
+  }, [media, titleDraft]);
+
   const startEditingPrice = useCallback(() => {
     if (!media) return;
     setPriceDraft(media.price ? String(media.price) : "");
@@ -268,10 +341,29 @@ export default function MediaDetailScreen() {
       Alert.alert("Enter a valid price", "Use a number like 25 or 25.00, or leave it blank for not-for-sale.");
       return;
     }
+    // Consent is only asked for once — the first time this post gets a
+    // price. A post that's already recorded consent (licenseConsentGiven)
+    // doesn't need to ask again just because the price changed.
+    const needsConsent = parsed > 0 && !media.licenseConsentGiven;
     setSavingPrice(true);
     try {
-      await api.updateMediaPrice(media.id, parsed, media._version);
-      setMedia({ ...media, price: parsed });
+      await api.updateMediaPrice(
+        media.id,
+        parsed,
+        media._version,
+        needsConsent ? { licenseTermsVersion: LICENSE_TERMS_VERSION } : undefined
+      );
+      setMedia({
+        ...media,
+        price: parsed,
+        ...(needsConsent
+          ? {
+              licenseConsentGiven: true,
+              licenseConsentAt: new Date().toISOString(),
+              licenseTermsVersion: LICENSE_TERMS_VERSION,
+            }
+          : {}),
+      });
       setEditingPrice(false);
     } catch (err) {
       Alert.alert("Couldn't save price", err instanceof Error ? err.message : "Unknown error");
@@ -282,7 +374,7 @@ export default function MediaDetailScreen() {
 
   const startEditingTags = useCallback(() => {
     if (!media) return;
-    setTagsDraft(media.tags);
+    setTagsDraft(topTags(media.tags));
     setTagInput("");
     setEditingTags(true);
   }, [media]);
@@ -290,9 +382,14 @@ export default function MediaDetailScreen() {
   const addTagFromInput = useCallback(() => {
     const trimmed = tagInput.trim();
     if (!trimmed) return;
-    setTagsDraft((tags) =>
-      tags.some((t) => t.toLowerCase() === trimmed.toLowerCase()) ? tags : [...tags, trimmed]
-    );
+    setTagsDraft((tags) => {
+      if (tags.some((t) => t.toLowerCase() === trimmed.toLowerCase())) return tags;
+      if (tags.length >= MAX_TAGS) {
+        Alert.alert("Tag limit", `You can add up to ${MAX_TAGS} tags.`);
+        return tags;
+      }
+      return [...tags, trimmed];
+    });
     setTagInput("");
   }, [tagInput]);
 
@@ -304,8 +401,9 @@ export default function MediaDetailScreen() {
     if (!media) return;
     setSavingTags(true);
     try {
-      await api.updateTags(media.id, tagsDraft, media._version, false);
-      setMedia({ ...media, tags: tagsDraft });
+      const limited = topTags(tagsDraft);
+      await api.updateTags(media.id, limited, media._version, false);
+      setMedia({ ...media, tags: limited });
       setEditingTags(false);
     } catch (err) {
       Alert.alert("Couldn't save tags", err instanceof Error ? err.message : "Unknown error");
@@ -364,22 +462,79 @@ export default function MediaDetailScreen() {
 
   return (
     <>
-      <Stack.Screen options={{ title: media.title || "Post" }} />
+      <Stack.Screen
+        options={{
+          title: media.title || "Post",
+          headerRight: isOwner && !editingTitle
+            ? () => (
+                <Pressable onPress={startEditingTitle} hitSlop={8}>
+                  <Text style={{ color: c.secondary, fontWeight: "600", fontSize: 15 }}>Edit</Text>
+                </Pressable>
+              )
+            : undefined,
+        }}
+      />
       <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.scroll}>
         <View style={styles.mediaWrap}>
-          {isVideo ? (
+          {isVideo && videoStillProcessing ? (
+            <View style={[styles.media, styles.mediaPlaceholder]}>
+              <Text style={{ color: "#fff" }}>Video processing…</Text>
+              <View style={styles.progressWrap}>
+                <ProcessingProgressBar trackColor="rgba(255,255,255,0.25)" barColor="#fff" progress={processingProgress} />
+              </View>
+            </View>
+          ) : isVideo ? (
             <VideoView player={videoPlayer} style={styles.media} nativeControls contentFit="contain" />
           ) : media.url ? (
             <Image source={{ uri: media.url }} style={styles.media} resizeMode="contain" />
           ) : (
             <View style={[styles.media, styles.mediaPlaceholder]}>
               <Text style={{ color: "#fff" }}>Processing…</Text>
+              <View style={styles.progressWrap}>
+                <ProcessingProgressBar trackColor="rgba(255,255,255,0.25)" barColor="#fff" />
+              </View>
             </View>
           )}
         </View>
 
         <View style={styles.body}>
-          <Text style={[styles.title, { color: c.text }]}>{media.title || "Untitled"}</Text>
+          {editingTitle ? (
+            <View style={styles.titleEditRow}>
+              <TextInput
+                value={titleDraft}
+                onChangeText={setTitleDraft}
+                placeholder="Untitled"
+                placeholderTextColor={c.textMuted}
+                maxLength={120}
+                autoFocus
+                style={[styles.titleInput, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
+              />
+              <Pressable
+                onPress={() => setEditingTitle(false)}
+                style={[styles.smallButton, styles.smallButtonOutline, { borderColor: c.border }]}
+              >
+                <Text style={{ color: c.text, fontWeight: "600", fontSize: 13 }}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveTitle}
+                disabled={savingTitle}
+                style={[styles.smallButton, { backgroundColor: c.accent, opacity: savingTitle ? 0.6 : 1 }]}
+              >
+                <Text style={{ color: c.accentText, fontWeight: "600", fontSize: 13 }}>
+                  {savingTitle ? "Saving…" : "Save"}
+                </Text>
+              </Pressable>
+            </View>
+          ) : (
+            <View style={styles.titleRow}>
+              <Text style={[styles.title, { color: c.text }]}>{media.title || "Untitled"}</Text>
+              {isOwner ? (
+                <Pressable onPress={startEditingTitle} hitSlop={8} style={styles.titleEditButton}>
+                  <Text style={{ color: c.secondary, fontWeight: "600", fontSize: 13 }}>Edit</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )}
           <View style={styles.metaRow}>
             <Text style={[styles.metaText, { color: c.textMuted }]}>
               {(media.viewCount ?? 0).toLocaleString()} {media.viewCount === 1 ? "view" : "views"}
@@ -438,16 +593,15 @@ export default function MediaDetailScreen() {
             </View>
           </View>
 
-          {/* Buy / owned — only for a for-sale post that isn't the
-              signed-in user's own upload. purchased === null means either
-              nothing to check yet or the check is still in flight, so the
-              button is simply omitted rather than flashing on then off. */}
+          {/* Buy / owned — priced post that isn't the uploader's. Show Buy
+              unless we already know they own it, so a slow/failed ownership
+              check cannot hide checkout. */}
           {media.price && !isOwner ? (
             purchased ? (
               <View style={[styles.ownedPill, { borderColor: c.border, backgroundColor: c.surface }]}>
                 <Text style={[styles.ownedText, { color: c.textMuted }]}>✓ You own a license for this</Text>
               </View>
-            ) : purchased === false ? (
+            ) : (
               <Pressable
                 onPress={buyMedia}
                 disabled={buying}
@@ -457,36 +611,57 @@ export default function MediaDetailScreen() {
                   {buying ? "Processing…" : `Buy license — ${formatUsPrice(media.price)}`}
                 </Text>
               </Pressable>
-            ) : null
+            )
           ) : null}
 
           {editingPrice ? (
-            <View style={styles.priceEditRow}>
-              <Text style={{ color: c.textMuted, fontSize: 14 }}>$</Text>
-              <TextInput
-                value={priceDraft}
-                onChangeText={setPriceDraft}
-                keyboardType="decimal-pad"
-                placeholder="0.00"
-                placeholderTextColor={c.textMuted}
-                style={[styles.priceInput, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
-              />
-              <Pressable
-                onPress={() => setEditingPrice(false)}
-                style={[styles.smallButton, styles.smallButtonOutline, { borderColor: c.border }]}
-              >
-                <Text style={{ color: c.text, fontWeight: "600", fontSize: 13 }}>Cancel</Text>
-              </Pressable>
-              <Pressable
-                onPress={savePrice}
-                disabled={savingPrice}
-                style={[styles.smallButton, { backgroundColor: c.accent, opacity: savingPrice ? 0.6 : 1 }]}
-              >
-                <Text style={{ color: c.accentText, fontWeight: "600", fontSize: 13 }}>
-                  {savingPrice ? "Saving…" : "Save"}
+            <>
+              <View style={styles.priceEditRow}>
+                <Text style={{ color: c.textMuted, fontSize: 14 }}>$</Text>
+                <TextInput
+                  value={priceDraft}
+                  onChangeText={setPriceDraft}
+                  keyboardType="decimal-pad"
+                  placeholder="0.00"
+                  placeholderTextColor={c.textMuted}
+                  style={[styles.priceInput, { borderColor: c.border, color: c.text, backgroundColor: c.surface }]}
+                />
+                <Pressable
+                  onPress={() => setEditingPrice(false)}
+                  style={[styles.smallButton, styles.smallButtonOutline, { borderColor: c.border }]}
+                >
+                  <Text style={{ color: c.text, fontWeight: "600", fontSize: 13 }}>Cancel</Text>
+                </Pressable>
+                <Pressable
+                  onPress={savePrice}
+                  disabled={savingPrice}
+                  style={[styles.smallButton, { backgroundColor: c.accent, opacity: savingPrice ? 0.6 : 1 }]}
+                >
+                  <Text style={{ color: c.accentText, fontWeight: "600", fontSize: 13 }}>
+                    {savingPrice ? "Saving…" : "Save"}
+                  </Text>
+                </Pressable>
+              </View>
+
+              <Text style={{ color: c.textMuted, fontSize: 12, lineHeight: 18, marginTop: spacing.xs }}>
+                Saving a price lists this for sale under Photo-OP’s{" "}
+                <Text
+                  style={{ color: c.secondary, fontWeight: "600" }}
+                  onPress={() => router.push("/license-terms")}
+                >
+                  Standard License Terms
                 </Text>
-              </Pressable>
-            </View>
+                .
+              </Text>
+            </>
+          ) : null}
+
+          {media.price ? (
+            <Link href="/license-terms" style={styles.licenseTermsLink}>
+              <Text style={{ color: c.textMuted, fontSize: 12, textDecorationLine: "underline" }}>
+                View license terms
+              </Text>
+            </Link>
           ) : null}
 
           {media.caption ? (
@@ -580,7 +755,7 @@ export default function MediaDetailScreen() {
                 </>
               ) : (
                 <View style={styles.tagRow}>
-                  {media.tags.map((tag, index) => (
+                  {topTags(media.tags).map((tag, index) => (
                     <View key={`${tag}-${index}`} style={[styles.tag, { backgroundColor: c.background, borderColor: c.border }]}>
                       <Text style={[styles.tagText, { color: c.textMuted }]}>{tag}</Text>
                     </View>
@@ -666,8 +841,20 @@ const styles = StyleSheet.create({
   mediaWrap: { width: "100%", aspectRatio: 4 / 5, backgroundColor: "#000" },
   media: { width: "100%", height: "100%" },
   mediaPlaceholder: { alignItems: "center", justifyContent: "center" },
+  progressWrap: { width: "50%", marginTop: 8 },
   body: { padding: spacing.lg, gap: spacing.sm },
-  title: { fontSize: 20, fontWeight: "700", fontFamily: "Outfit_700Bold" },
+  title: { fontSize: 20, fontWeight: "700", fontFamily: "Outfit_700Bold", flex: 1, flexShrink: 1 },
+  titleRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: spacing.sm },
+  titleEditButton: { flexShrink: 0, paddingVertical: 4, paddingLeft: spacing.sm },
+  titleEditRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs },
+  titleInput: {
+    flex: 1,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.sm + 4,
+    paddingVertical: spacing.xs + 4,
+    fontSize: 16,
+  },
   metaRow: { flexDirection: "row", flexWrap: "wrap", alignItems: "center" },
   metaText: { fontSize: 13 },
   metaLink: { fontWeight: "600" },
@@ -710,6 +897,18 @@ const styles = StyleSheet.create({
   },
   scoreText: { fontSize: 12 },
   scoreValue: { fontSize: 13, fontWeight: "700" },
+  consentRow: { flexDirection: "row", alignItems: "center", gap: spacing.xs, marginTop: spacing.xs },
+  consentBlock: { marginTop: spacing.xs, gap: 8 },
+  consentLink: { marginLeft: 28 },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: radius.sm,
+    borderWidth: StyleSheet.hairlineWidth,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  licenseTermsLink: { marginTop: spacing.xs },
   buyButton: {
     marginTop: spacing.sm,
     borderRadius: radius.md,
